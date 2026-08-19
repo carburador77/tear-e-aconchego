@@ -1,0 +1,4 @@
+import { createClient } from './client';
+function fileId(){if(typeof crypto!=='undefined'&&typeof crypto.randomUUID==='function')return crypto.randomUUID();return `${Date.now()}-${Math.random().toString(36).slice(2,12)}`;}
+export async function uploadImage(file: File, folder: 'products'|'categories'|'site') { const supabase=createClient(); const ext=file.name.split('.').pop()||'jpg'; const path=`${folder}/${fileId()}.${ext}`; const {error}=await supabase.storage.from('catalog-images').upload(path,file,{upsert:false,cacheControl:'31536000',contentType:file.type}); if(error) throw error; return supabase.storage.from('catalog-images').getPublicUrl(path).data.publicUrl; }
+export async function removeImage(url?:string|null){if(!url||!url.includes('/storage/v1/object/public/catalog-images/'))return;const path=decodeURIComponent(url.split('/catalog-images/')[1]||'');if(path)await createClient().storage.from('catalog-images').remove([path]);}
