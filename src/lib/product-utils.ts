@@ -1,4 +1,9 @@
 const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
+const productNameCollator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+
+export function sortProductsAlphabetically<T extends { name: string }>(items: T[]) {
+  return [...items].sort((first, second) => productNameCollator.compare(first.name, second.name));
+}
 
 export function makeProductSlug(value: string) {
   return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

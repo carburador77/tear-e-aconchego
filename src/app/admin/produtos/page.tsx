@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { sortProductsAlphabetically } from '@/lib/product-utils';
 import { removeImage, uploadImage } from '@/lib/supabase/storage';
 import { defaultProductWhatsAppMessage, isLegacyWhatsAppUrl } from '@/lib/whatsapp';
 import type { Category, Product } from '@/types/catalog';
@@ -19,8 +20,8 @@ export default function ProductsPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  const load = async () => { const [{ data: categoryData }, { data: productData }] = await Promise.all([supabase.from('categories').select('*').order('display_order'), supabase.from('products').select('*').order('display_order')]); setCategories((categoryData ?? []) as Category[]); setProducts((productData ?? []) as Product[]); };
-  useEffect(() => { void Promise.all([supabase.from('categories').select('*').order('display_order'), supabase.from('products').select('*').order('display_order')]).then(([categoryResult, productResult]) => { setCategories((categoryResult.data ?? []) as Category[]); setProducts((productResult.data ?? []) as Product[]); }); }, [supabase]);
+  const load = async () => { const [{ data: categoryData }, { data: productData }] = await Promise.all([supabase.from('categories').select('*').order('display_order'), supabase.from('products').select('*').order('name')]); setCategories((categoryData ?? []) as Category[]); setProducts(sortProductsAlphabetically((productData ?? []) as Product[])); };
+  useEffect(() => { void Promise.all([supabase.from('categories').select('*').order('display_order'), supabase.from('products').select('*').order('name')]).then(([categoryResult, productResult]) => { setCategories((categoryResult.data ?? []) as Category[]); setProducts(sortProductsAlphabetically((productResult.data ?? []) as Product[])); }); }, [supabase]);
   const update = (field: keyof ProductForm, value: string) => setForm((current) => ({ ...current, [field]: value }));
   const cancelEdit = () => { setForm(emptyForm); setImageFile(null); setMessage(''); };
   const editProduct = (product: Product) => { setImageFile(null); setMessage(`Editando: ${product.name}`); setForm({ id: product.id, category_id: product.category_id, name: product.name, description: product.description ?? '', price: product.price_label ?? product.price?.toString() ?? '', image_url: product.image_url ?? '', origin: product.origin ?? '', dimensions: product.dimensions ?? '', care: product.care ?? '', whatsapp_url: product.whatsapp_url ?? '' }); };
