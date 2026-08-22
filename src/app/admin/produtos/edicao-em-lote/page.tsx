@@ -19,6 +19,9 @@ type PendingChange = {
 };
 type CopyFields = Record<EditableField, boolean>;
 type ProductView = Product & { priceInput: string };
+type ImportMatch = 'exact' | 'duplicate' | 'not_found' | 'manual';
+type ImportRow = { id: string; productName: string; description: string; matchedProductId: string; candidateIds: string[]; match: ImportMatch; note: string; ignored: boolean; error: string };
+type ImportPreviewRow = ImportRow & { product?: ProductView; status: 'ready' | 'not_found' | 'conflict' | 'ignored' | 'error'; statusLabel: string };
 
 const emptyCopyFields: CopyFields = { category_id: false, subcategory_id: false, price: false, description: false, origin: false, dimensions: false, care: false };
 
@@ -69,6 +72,23 @@ function completion(product: ProductView) {
   return { noDescription, noPrice, noSubcategory, incomplete: noDescription || noPrice || noSubcategory };
 }
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    return copied;
+  }
+}
+
 export default function BatchEditProductsPage() {
   const [supabase] = useState(() => createClient());
   const [categories, setCategories] = useState<Category[]>([]);
@@ -86,6 +106,13 @@ export default function BatchEditProductsPage() {
   const [copyFields, setCopyFields] = useState<CopyFields>(emptyCopyFields);
   const [descriptionEditor, setDescriptionEditor] = useState('');
   const [descriptionDraft, setDescriptionDraft] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [importScopeIds, setImportScopeIds] = useState<string[]>([]);
+  const [allowDescriptionOverwrite, setAllowDescriptionOverwrite] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
+  const [importApplying, setImportApplying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -147,6 +174,7 @@ export default function BatchEditProductsPage() {
   }, [categoryFilter, completionFilter, search, subcategoryFilter, views]);
 
   const categoryName = (id: string) => categories.find((category) => category.id === id)?.name ?? 'Categoria não encontrada';
+  const subcategoryName = (id: string | null) => id ? subcategories.find((subcategory) => subcategory.id === id)?.name ?? 'Subcategoria não encontrada' : 'Sem subcategoria';
   const stage = (productId: string, changes: PendingChange) => {
     const product = products.find((item) => item.id === productId);
     if (!product) return;
@@ -182,6 +210,104 @@ export default function BatchEditProductsPage() {
   const selectVisible = () => setSelected(new Set(visibleProducts.map((product) => product.id)));
 
   const selectedViews = visibleProducts.filter((product) => selected.has(product.id));
+  const importScopeProducts = useMemo(() => views.filter((product) => importScopeIds.includes(product.id)), [importScopeIds, views]);
+  const assignmentCounts = useMemo(() => importRows.reduce((counts, row) => {
+    if (row.matchedProductId && !row.ignored) counts.set(row.matchedProductId, (counts.get(row.matchedProductId) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>()), [importRows]);
+  const importPreview = useMemo<ImportPreviewRow[]>(() => importRows.map((row) => {
+    const product = views.find((item) => item.id === row.matchedProductId);
+    if (row.ignored) return { ...row, product, status: 'ignored', statusLabel: 'Ignorado' };
+    if (!row.matchedProductId || !product) return { ...row, product, status: row.match === 'duplicate' ? 'conflict' : 'not_found', statusLabel: row.match === 'duplicate' ? 'Nome duplicado — escolha o produto' : 'Produto não encontrado' };
+    if ((assignmentCounts.get(row.matchedProductId) ?? 0) > 1) return { ...row, product, status: 'conflict', statusLabel: 'Produto repetido na importação' };
+    if (!row.description.trim()) return { ...row, product, status: 'conflict', statusLabel: 'Descrição vazia' };
+    if (product.description?.trim() && !allowDescriptionOverwrite) return { ...row, product, status: 'conflict', statusLabel: 'Este produto já possui descrição' };
+    if (row.error) return { ...row, product, status: 'error', statusLabel: 'Erro — tente novamente' };
+    return { ...row, product, status: 'ready', statusLabel: 'Pronto' };
+  }), [allowDescriptionOverwrite, assignmentCounts, importRows, views]);
+  const importCounts = useMemo(() => importPreview.reduce((counts, row) => {
+    if (row.status === 'ready' || row.status === 'error') counts.ready += 1;
+    if (row.status === 'not_found') counts.notFound += 1;
+    if (row.status === 'conflict') counts.conflicts += 1;
+    return counts;
+  }, { ready: 0, notFound: 0, conflicts: 0 }), [importPreview]);
+
+  const selectedNames = () => selectedViews.map((product) => product.name);
+  const copyDescriptionPrompt = async () => {
+    const names = selectedNames();
+    if (!names.length) { setMessage('Selecione pelo menos um produto.'); return; }
+    const list = names.map((name) => `- ${name}`).join('\n');
+    const prompt = `Crie uma descrição breve, sofisticada e coerente com produtos artesanais premium para cada produto abaixo.\n\nAs descrições serão usadas no catálogo da Tear & Aconchego.\n\nEvite textos excessivamente longos e não invente materiais, medidas ou características técnicas que não estejam informadas.\n\nProdutos:\n\n${list}\n\nRetorne exclusivamente no seguinte formato JSON:\n\n[\n  {\n    "produto": "Nome exato do produto",\n    "descricao": "Descrição do produto"\n  }\n]`;
+    setMessage(await copyText(prompt) ? 'Prompt copiado.' : 'Não foi possível copiar o prompt.');
+  };
+  const copyOnlyNames = async () => {
+    const names = selectedNames();
+    if (!names.length) { setMessage('Selecione pelo menos um produto.'); return; }
+    setMessage(await copyText(names.join('\n')) ? 'Nomes copiados.' : 'Não foi possível copiar os nomes.');
+  };
+  const openImport = () => {
+    if (!selectedViews.length) { setMessage('Selecione pelo menos um produto.'); return; }
+    setImportScopeIds(selectedViews.map((product) => product.id));
+    setImportText(''); setImportRows([]); setImportMessage(''); setAllowDescriptionOverwrite(false); setImportOpen(true);
+  };
+  const validateImport = () => {
+    setImportMessage('');
+    try {
+      const cleaned = importText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+      const parsed: unknown = JSON.parse(cleaned);
+      if (!Array.isArray(parsed)) throw new Error('O conteúdo precisa ser uma lista JSON.');
+      const invalidIndex = parsed.findIndex((item) => typeof item !== 'object' || item === null || Array.isArray(item) || typeof (item as Record<string, unknown>).produto !== 'string' || !(item as Record<string, unknown>).produto?.toString().trim() || typeof (item as Record<string, unknown>).descricao !== 'string' || !(item as Record<string, unknown>).descricao?.toString().trim());
+      if (invalidIndex >= 0) throw new Error(`O item ${invalidIndex + 1} precisa conter “produto” e “descricao” preenchidos.`);
+      const rows = parsed.map((item, index) => {
+        const record = item as Record<string, string>;
+        const productName = record.produto.trim();
+        const description = record.descricao.trim();
+        const scopeMatches = importScopeProducts.filter((product) => product.name.trim() === productName);
+        const catalogMatches = views.filter((product) => product.name.trim() === productName);
+        if (catalogMatches.length > 1) return { id: `${index}-${productName}`, productName, description, matchedProductId: '', candidateIds: scopeMatches.map((product) => product.id), match: 'duplicate' as const, note: 'Existem produtos com este mesmo nome. Escolha conscientemente o destino.', ignored: false, error: '' };
+        if (scopeMatches.length === 1) return { id: `${index}-${productName}`, productName, description, matchedProductId: scopeMatches[0].id, candidateIds: [scopeMatches[0].id], match: 'exact' as const, note: '', ignored: false, error: '' };
+        if (scopeMatches.length > 1) return { id: `${index}-${productName}`, productName, description, matchedProductId: '', candidateIds: scopeMatches.map((product) => product.id), match: 'duplicate' as const, note: '', ignored: false, error: '' };
+        return { id: `${index}-${productName}`, productName, description, matchedProductId: '', candidateIds: importScopeProducts.map((product) => product.id), match: 'not_found' as const, note: catalogMatches.length ? 'O produto existe no catálogo, mas não está entre os produtos selecionados.' : '', ignored: false, error: '' };
+      }).sort((first, second) => first.productName.localeCompare(second.productName, 'pt-BR', { sensitivity: 'base' }));
+      setImportRows(rows);
+      setImportMessage(`${rows.length} ${rows.length === 1 ? 'descrição recebida' : 'descrições recebidas'}. Revise a prévia antes de aplicar.`);
+    } catch (error) {
+      setImportRows([]);
+      setImportMessage(error instanceof SyntaxError ? 'Não foi possível interpretar o conteúdo. Verifique se o JSON está completo.' : errorMessage(error, 'Não foi possível validar as descrições.'));
+    }
+  };
+  const associateImportRow = (rowId: string, productId: string) => setImportRows((current) => current.map((row) => row.id === rowId ? { ...row, matchedProductId: productId, match: productId ? 'manual' : row.candidateIds.length > 1 ? 'duplicate' : 'not_found', ignored: false, error: '' } : row));
+  const updateImportedDescription = (rowId: string, description: string) => setImportRows((current) => current.map((row) => row.id === rowId ? { ...row, description, error: '' } : row));
+  const toggleIgnoredImport = (rowId: string) => setImportRows((current) => current.map((row) => row.id === rowId ? { ...row, ignored: !row.ignored, error: '' } : row));
+  const applyImportedDescriptions = async () => {
+    const ready = importPreview.filter((row) => (row.status === 'ready' || row.status === 'error') && row.product);
+    if (!ready.length || importApplying) { setImportMessage('Não há descrições prontas para atualizar.'); return; }
+    if (!window.confirm(`${ready.length} ${ready.length === 1 ? 'produto terá' : 'produtos terão'} suas descrições atualizadas. Deseja continuar?`)) return;
+    setImportApplying(true); setImportMessage('Aplicando descrições...');
+    const succeeded = new Map<string, string>();
+    const failed = new Map<string, string>();
+    for (const row of ready) {
+      const { error } = await supabase.from('products').update({ description: row.description.trim() }).eq('id', row.matchedProductId).select('id').single();
+      if (error) failed.set(row.id, error.message); else succeeded.set(row.matchedProductId, row.description.trim());
+    }
+    if (succeeded.size) {
+      setProducts((current) => sortProductsAlphabetically(current.map((product) => succeeded.has(product.id) ? { ...product, description: succeeded.get(product.id) ?? product.description } : product)));
+      setPending((current) => {
+        const next = { ...current };
+        succeeded.forEach((_description, productId) => {
+          if (!next[productId]) return;
+          const change = { ...next[productId] };
+          delete change.description;
+          if (Object.keys(change).length) next[productId] = change; else delete next[productId];
+        });
+        return next;
+      });
+    }
+    setImportRows((current) => current.filter((row) => !succeeded.has(row.matchedProductId)).map((row) => ({ ...row, error: failed.get(row.id) ?? row.error })));
+    const result = failed.size ? `${succeeded.size} ${succeeded.size === 1 ? 'descrição atualizada' : 'descrições atualizadas'} com sucesso. ${failed.size} ${failed.size === 1 ? 'apresentou erro' : 'apresentaram erro'}.` : `${succeeded.size} ${succeeded.size === 1 ? 'descrição atualizada' : 'descrições atualizadas'} com sucesso.`;
+    setImportMessage(result); setMessage(result); setImportApplying(false);
+    if (!failed.size) setImportOpen(false);
+  };
 
   const applyBulkSubcategory = () => {
     if (!selectedViews.length) { setMessage('Selecione pelo menos um produto.'); return; }
@@ -312,6 +438,7 @@ export default function BatchEditProductsPage() {
 
     <section className="mt-4 rounded-lg border border-[#d7cabc] bg-white p-4">
       <div className="flex flex-wrap items-center gap-3 text-sm"><button type="button" onClick={selectVisible} disabled={!visibleProducts.length || allVisibleSelected} className="underline disabled:opacity-50">Selecionar todos os produtos visíveis</button><button type="button" onClick={() => setSelected(new Set())} disabled={!selected.size} className="underline disabled:opacity-50">Desmarcar todos</button><strong>{selectedViews.length} {selectedViews.length === 1 ? 'produto selecionado visível' : 'produtos selecionados visíveis'}</strong>{selected.size > selectedViews.length && <span className="text-[#8a5d2d]">{selected.size - selectedViews.length} fora do filtro serão ignorados</span>}<span className="text-[#6e6254]">{visibleProducts.length} visíveis</span></div>
+      <div className="mt-4 rounded bg-[#e7dbca] p-3"><h2 className="font-serif text-lg text-[#302518]">Descrições com ChatGPT</h2><p className="mt-1 text-xs text-[#6e6254]">Copie os produtos selecionados, gere as descrições externamente e importe o JSON para revisão.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void copyDescriptionPrompt()} className="rounded bg-[#52604a] px-4 py-2 text-sm font-semibold text-white">Copiar para gerar descrições</button><button type="button" onClick={() => void copyOnlyNames()} className="rounded border border-[#52604a] px-4 py-2 text-sm font-semibold text-[#52604a]">Copiar somente nomes</button><button type="button" onClick={openImport} className="rounded border border-[#52604a] px-4 py-2 text-sm font-semibold text-[#52604a]">Importar descrições</button></div></div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded bg-[#f7f2eb] p-3"><h2 className="font-serif text-lg">Aplicar subcategoria</h2><div className="mt-2 flex flex-wrap gap-2"><select aria-label="Subcategoria para os selecionados" value={bulkSubcategory} disabled={!bulkCategoryId} onChange={(event) => setBulkSubcategory(event.target.value)} className="min-w-52 flex-1"><option value="">{bulkCategoryId ? 'Escolha a subcategoria' : 'Selecione produtos da mesma categoria'}</option>{bulkSubcategories.map((subcategory) => <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>)}</select><button type="button" onClick={applyBulkSubcategory} className="rounded border border-[#52604a] px-4 py-2 text-sm font-semibold text-[#52604a]">APLICAR</button></div></div>
         <div className="rounded bg-[#f7f2eb] p-3"><h2 className="font-serif text-lg">Aplicar preço aos selecionados</h2><div className="mt-2 flex flex-wrap gap-2"><input value={bulkPrice} onChange={(event) => setBulkPrice(event.target.value)} placeholder="Ex.: 29,90 ou Sob Consulta" className="min-w-52 flex-1"/><button type="button" onClick={applyBulkPrice} className="rounded border border-[#52604a] px-4 py-2 text-sm font-semibold text-[#52604a]">APLICAR</button></div></div>
@@ -333,5 +460,18 @@ export default function BatchEditProductsPage() {
     </div>
 
     {editorProduct && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="description-title"><section className="w-full max-w-2xl rounded-lg bg-[#f7f2eb] p-5 shadow-xl"><div className="flex items-start gap-4">{editorProduct.image_url && <img src={editorProduct.image_url} alt="" className="h-20 w-20 rounded object-cover"/>}<div className="min-w-0 flex-1"><h2 id="description-title" className="font-serif text-2xl text-[#302518]">{editorProduct.name}</h2><p className="text-sm text-[#6e6254]">Edite a descrição e salve tudo pelo botão principal da página.</p></div><button type="button" aria-label="Fechar edição de descrição" onClick={() => setDescriptionEditor('')} className="text-xl">×</button></div><label className="mt-4 block text-sm">Descrição<textarea autoFocus rows={8} value={descriptionDraft} onChange={(event) => setDescriptionDraft(event.target.value)} className="mt-1 w-full"/></label><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><div className="flex gap-2"><button type="button" disabled={editorIndex <= 0} onClick={() => moveDescription(-1)} className="rounded border border-[#786e60] px-4 py-2 text-sm disabled:opacity-40">← Anterior</button><button type="button" disabled={editorIndex < 0 || editorIndex >= visibleProducts.length - 1} onClick={() => moveDescription(1)} className="rounded border border-[#786e60] px-4 py-2 text-sm disabled:opacity-40">Próximo →</button></div><button type="button" onClick={saveDescriptionAndClose} className="rounded bg-[#52604a] px-4 py-2 text-sm font-semibold text-white">GUARDAR DESCRIÇÃO</button></div></section></div>}
+
+    {importOpen && <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="import-title"><section className="mx-auto min-h-fit w-full max-w-6xl rounded-lg bg-[#f7f2eb] p-4 shadow-xl sm:p-6"><div className="flex items-start justify-between gap-4"><div><h2 id="import-title" className="font-serif text-2xl text-[#302518]">Importar descrições</h2><p className="mt-1 text-sm text-[#6e6254]">Cole abaixo o bloco de descrições recebido do ChatGPT.</p></div><button type="button" disabled={importApplying} aria-label="Fechar importação" onClick={() => setImportOpen(false)} className="text-2xl disabled:opacity-40">×</button></div>
+      <label className="mt-4 block text-sm">JSON das descrições<textarea rows={10} value={importText} onChange={(event) => setImportText(event.target.value)} placeholder={'[\n  {\n    "produto": "Nome exato do produto",\n    "descricao": "Descrição do produto"\n  }\n]'} className="mt-1 w-full font-mono text-sm"/></label>
+      <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" disabled={importApplying || !importText.trim()} onClick={validateImport} className="rounded bg-[#52604a] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">VALIDAR DESCRIÇÕES</button><span className="text-sm text-[#6e6254]">Somente o campo descrição poderá ser atualizado.</span></div>
+      {importMessage && <p role="status" className="mt-3 rounded border border-[#c6b8a8] bg-white px-4 py-3 text-sm">{importMessage}</p>}
+      {importRows.length > 0 && <><section aria-label="Resumo da importação" className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4"><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Descrições recebidas: <strong>{importRows.length}</strong></p><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Prontas para atualizar: <strong>{importCounts.ready}</strong></p><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Produtos não encontrados: <strong>{importCounts.notFound}</strong></p><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Conflitos: <strong>{importCounts.conflicts}</strong></p></section>
+        <label className="mt-4 flex items-center gap-2 rounded border border-[#d7cabc] bg-white p-3 text-sm"><input type="checkbox" checked={allowDescriptionOverwrite} onChange={(event) => setAllowDescriptionOverwrite(event.target.checked)}/>Permitir substituir descrições existentes</label>
+        <div className="mt-4 space-y-3">{importPreview.map((row) => {
+          const associationOptions = row.match === 'duplicate' ? row.candidateIds : importScopeProducts.map((product) => product.id);
+          return <article key={row.id} className={`rounded border p-4 ${row.status === 'ready' ? 'border-[#8da080] bg-white' : row.status === 'ignored' ? 'border-[#d7cabc] bg-[#eee8df] opacity-70' : 'border-[#d9a1a1] bg-white'}`}><div className="grid gap-4 lg:grid-cols-[220px_1fr_1.3fr_150px]"><div>{row.product?.image_url && <img src={row.product.image_url} alt="" loading="lazy" className="mb-2 h-14 w-14 rounded object-cover"/>}<strong className="block">{row.product?.name ?? row.productName}</strong>{row.product && <p className="mt-1 text-xs text-[#6e6254]">{categoryName(row.product.category_id)} · {subcategoryName(row.product.subcategory_id)}</p>}{(row.match === 'duplicate' || row.match === 'not_found') && !row.ignored && <label className="mt-2 block text-xs">Associar ao produto<select aria-label={`Associar ${row.productName}`} value={row.matchedProductId} onChange={(event) => associateImportRow(row.id, event.target.value)} className="mt-1 w-full"><option value="">Escolha manualmente</option>{associationOptions.map((productId) => { const option = importScopeProducts.find((product) => product.id === productId); return option ? <option key={option.id} value={option.id}>{option.name} — {categoryName(option.category_id)} / {subcategoryName(option.subcategory_id)}</option> : null; })}</select></label>}{row.note && <p className="mt-2 text-xs text-[#8a5d2d]">{row.note}</p>}</div><div><strong className="text-xs uppercase text-[#6e6254]">Descrição atual</strong>{row.product?.description?.trim() ? <details className="mt-1"><summary className="cursor-pointer text-sm underline">Visualizar texto completo</summary><p className="mt-2 whitespace-pre-wrap rounded bg-[#f2ece3] p-2 text-sm">{row.product.description}</p></details> : <p className="mt-1 text-sm">Sem descrição</p>}</div><label className="text-xs font-semibold uppercase text-[#6e6254]">Nova descrição<textarea rows={5} value={row.description} disabled={row.ignored || importApplying} onChange={(event) => updateImportedDescription(row.id, event.target.value)} className="mt-1 w-full text-sm font-normal normal-case"/></label><div><span className={`block rounded px-2 py-1 text-xs font-semibold ${row.status === 'ready' ? 'bg-[#dfe8d8] text-[#405039]' : row.status === 'ignored' ? 'bg-[#ddd5ca] text-[#655c52]' : 'bg-[#f5dada] text-[#7b3333]'}`}>{row.statusLabel}</span>{row.error && <p className="mt-2 text-xs text-red-700">{row.error}</p>}<button type="button" disabled={importApplying} onClick={() => toggleIgnoredImport(row.id)} className="mt-3 text-xs underline">{row.ignored ? 'Incluir novamente' : 'Ignorar'}</button></div></div></article>;
+        })}</div>
+        <div className="sticky bottom-0 mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-[#d7cabc] bg-[#f7f2eb] py-4"><button type="button" disabled={importApplying} onClick={() => setImportOpen(false)} className="rounded border border-[#786e60] px-4 py-2 text-sm">Cancelar</button><button type="button" disabled={!importCounts.ready || importApplying} onClick={() => void applyImportedDescriptions()} className="rounded bg-[#52604a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{importApplying ? 'APLICANDO...' : `APLICAR ${importCounts.ready} ${importCounts.ready === 1 ? 'DESCRIÇÃO' : 'DESCRIÇÕES'}`}</button></div></>}
+    </section></div>}
   </main>;
 }
