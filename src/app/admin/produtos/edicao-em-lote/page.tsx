@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { comparableProductName, sortProductsAlphabetically } from '@/lib/product-utils';
+import { getProductNameCorrections } from '@/lib/product-name-normalization';
 import { createClient } from '@/lib/supabase/client';
 import type { Category, Product, Subcategory } from '@/types/catalog';
 
 type CompletionFilter = 'all' | 'incomplete' | 'description' | 'price' | 'subcategory';
-type EditableField = 'category_id' | 'subcategory_id' | 'price' | 'description' | 'origin' | 'dimensions' | 'care';
+type EditableField = 'name' | 'category_id' | 'subcategory_id' | 'price' | 'description' | 'origin' | 'dimensions' | 'care';
 type PendingChange = {
+  name?: string;
   category_id?: string;
   subcategory_id?: string | null;
   price?: string;
@@ -23,7 +25,7 @@ type ImportMatch = 'exact' | 'duplicate' | 'not_found' | 'manual';
 type ImportRow = { id: string; productName: string; description: string; matchedProductId: string; candidateIds: string[]; match: ImportMatch; note: string; ignored: boolean; error: string };
 type ImportPreviewRow = ImportRow & { product?: ProductView; status: 'ready' | 'not_found' | 'conflict' | 'ignored' | 'error'; statusLabel: string };
 
-const emptyCopyFields: CopyFields = { category_id: false, subcategory_id: false, price: false, description: false, origin: false, dimensions: false, care: false };
+const emptyCopyFields: CopyFields = { name: false, category_id: false, subcategory_id: false, price: false, description: false, origin: false, dimensions: false, care: false };
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -37,6 +39,7 @@ function productPriceInput(product: Product) {
 }
 
 function normalizedValue(field: EditableField, value: string | null) {
+  if (field === 'name') return (value ?? '').trim();
   if (field === 'subcategory_id') return value || null;
   if (field === 'category_id') return value ?? '';
   if (field === 'price' || field === 'description') return (value ?? '').trim();
@@ -44,6 +47,7 @@ function normalizedValue(field: EditableField, value: string | null) {
 }
 
 function originalValue(product: Product, field: EditableField) {
+  if (field === 'name') return product.name.trim();
   if (field === 'price') return productPriceInput(product);
   if (field === 'subcategory_id') return product.subcategory_id;
   if (field === 'category_id') return product.category_id;
@@ -55,6 +59,7 @@ function effectiveProduct(product: Product, change?: PendingChange): ProductView
   const has = (field: keyof PendingChange) => Boolean(change && Object.prototype.hasOwnProperty.call(change, field));
   return {
     ...product,
+    name: has('name') ? change?.name ?? product.name : product.name,
     category_id: has('category_id') ? change?.category_id ?? product.category_id : product.category_id,
     subcategory_id: has('subcategory_id') ? change?.subcategory_id ?? null : product.subcategory_id,
     description: has('description') ? change?.description ?? '' : product.description,
@@ -185,6 +190,7 @@ export default function BatchEditProductsPage() {
         if (value === normalizedValue(field, originalValue(product, field))) delete nextChange[field];
         else if (field === 'subcategory_id') nextChange.subcategory_id = value as string | null;
         else if (field === 'category_id') nextChange.category_id = value as string;
+        else if (field === 'name') nextChange.name = value as string;
         else if (field === 'price') nextChange.price = value as string;
         else if (field === 'description') nextChange.description = value as string;
         else nextChange[field] = value as string | null;
@@ -330,6 +336,14 @@ export default function BatchEditProductsPage() {
     setMessage(`Preço preparado para ${selectedViews.length} ${selectedViews.length === 1 ? 'produto' : 'produtos'}. Clique em SALVAR ALTERAÇÕES.`);
   };
 
+  const prepareNameNormalization = () => {
+    const corrections = getProductNameCorrections(products);
+    if (!corrections.length) { setMessage('Não há nomes, descrições ou materiais com correções seguras pendentes.'); return; }
+    if (!window.confirm(`${corrections.length} ${corrections.length === 1 ? 'produto receberá uma correção segura' : 'produtos receberão correções seguras'} de nome, descrição ou material. Slugs, URLs e todos os demais campos serão preservados. Preparar alterações?`)) return;
+    corrections.forEach((correction) => stage(correction.id, correction));
+    setMessage(`${corrections.length} ${corrections.length === 1 ? 'correção preparada' : 'correções preparadas'}. Revise a prévia e clique em SALVAR ALTERAÇÕES.`);
+  };
+
   const applyCopy = () => {
     const source = views.find((product) => product.id === copySource);
     const fields = (Object.keys(copyFields) as EditableField[]).filter((field) => copyFields[field]);
@@ -375,6 +389,7 @@ export default function BatchEditProductsPage() {
       if (!product) continue;
       try {
         const row: Record<string, string | number | null> = {};
+        if (change.name !== undefined) row.name = change.name.trim();
         if (change.category_id !== undefined) row.category_id = change.category_id;
         if (change.subcategory_id !== undefined) row.subcategory_id = change.subcategory_id;
         if (change.description !== undefined) row.description = change.description.trim();
@@ -435,6 +450,8 @@ export default function BatchEditProductsPage() {
     </section>
 
     <section aria-label="Resumo de preenchimento" className="mt-4 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4"><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Produtos incompletos: <strong>{counters.incomplete}</strong></p><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Sem descrição: <strong>{counters.description}</strong></p><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Sem preço: <strong>{counters.price}</strong></p><p className="rounded border border-[#d7cabc] bg-white px-3 py-2">Sem subcategoria: <strong>{counters.subcategory}</strong></p></section>
+
+    <section className="mt-4 rounded-lg border border-[#d7cabc] bg-white p-4"><h2 className="font-serif text-xl text-[#302518]">Padronização segura de nomes</h2><p className="mt-1 max-w-3xl text-sm text-[#6e6254]">Corrige somente os padrões já revisados: Caminho de Mesa, Porta-Copo, Porta-Guardanapo, Porta-Talher, capitalização, Macramê e Náutico. URLs, slugs, imagens, preços, categorias e demais dados não são alterados.</p><button type="button" onClick={prepareNameNormalization} disabled={saving} className="mt-3 rounded border border-[#52604a] px-4 py-2 text-sm font-semibold text-[#52604a] disabled:opacity-50">REVISAR E PREPARAR CORREÇÕES</button></section>
 
     <section className="mt-4 rounded-lg border border-[#d7cabc] bg-white p-4">
       <div className="flex flex-wrap items-center gap-3 text-sm"><button type="button" onClick={selectVisible} disabled={!visibleProducts.length || allVisibleSelected} className="underline disabled:opacity-50">Selecionar todos os produtos visíveis</button><button type="button" onClick={() => setSelected(new Set())} disabled={!selected.size} className="underline disabled:opacity-50">Desmarcar todos</button><strong>{selectedViews.length} {selectedViews.length === 1 ? 'produto selecionado visível' : 'produtos selecionados visíveis'}</strong>{selected.size > selectedViews.length && <span className="text-[#8a5d2d]">{selected.size - selectedViews.length} fora do filtro serão ignorados</span>}<span className="text-[#6e6254]">{visibleProducts.length} visíveis</span></div>
