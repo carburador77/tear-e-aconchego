@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useState } from 'react';
 import AddToSelectionButton from '@/components/AddToSelectionButton';
 import { formatProductPrice } from '@/lib/price';
-import type { Product } from '@/types/catalog';
+import type { CatalogProduct } from '@/types/catalog';
 
-export default function ProductCatalogCard({ product, showCategory = false }: { product: Product; showCategory?: boolean }) {
+export default function ProductCatalogCard({ product, showCategory = false }: { product: CatalogProduct; showCategory?: boolean }) {
   const variants = product.variants ?? [];
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selected = variants[selectedIndex];
@@ -18,7 +18,7 @@ export default function ProductCatalogCard({ product, showCategory = false }: { 
   return <article className="group">
     <div className="relative overflow-hidden">
       <Link href={`/produto/${product.slug}`} aria-label={`Ver ${product.name}`}>
-        <img className="h-80 w-full object-cover transition-opacity duration-200 group-hover:scale-[1.02]" src={image} alt={selected ? `${product.name} - ${selected.color_name}` : product.name} />
+        <img className="h-80 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]" src={image} alt={selected ? `${product.name} - ${selected.color_name}` : product.name} width={800} height={800} loading="lazy" decoding="async" />
       </Link>
       {hasNavigation && <>
         <button type="button" aria-label="Ver cor anterior" onClick={selectPrevious} className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-[#fffdf9]/90 text-2xl text-[#42362d] shadow-sm transition hover:bg-white">‹</button>
@@ -31,7 +31,7 @@ export default function ProductCatalogCard({ product, showCategory = false }: { 
       {showCategory && <p className="mt-3 text-[10px] uppercase tracking-wide text-[#766d63]">{product.categories?.name}</p>}
       <h2 className="catalog-card-name mt-2 font-serif text-xl leading-tight">{product.name}</h2>
       {product.description?.trim() && <p className="catalog-card-description mt-2 text-sm leading-relaxed text-[#5f5549]">{product.description}</p>}
-      <strong className="mt-2 block font-serif">{formatProductPrice(product.price, product.price_label)}</strong>
+      <strong className="mt-2 block font-serif">{formatProductPrice(product.price, product.custom_price_text)}</strong>
     </Link>
     <AddToSelectionButton productId={product.id} productName={product.name} variantId={selected?.id ?? null} variantName={selected?.color_name ?? null} className="mt-3" />
   </article>;

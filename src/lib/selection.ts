@@ -2,6 +2,8 @@ import type { SelectionItem } from '@/types/selection';
 
 export const SELECTION_STORAGE_KEY = 'tear-aconchego-selection-v1';
 export const MAX_SELECTION_QUANTITY = 9999;
+export const MAX_SELECTION_LINES = 30;
+export const MAX_STORED_SELECTION_LENGTH = 100_000;
 
 export function selectionItemKey(productId: string, variantId?: string | null) {
   return `${productId}::${variantId ?? ''}`;
@@ -15,12 +17,13 @@ export function normalizeSelectionQuantity(value: unknown) {
 
 export function parseStoredSelection(value: string | null): SelectionItem[] {
   if (!value) return [];
+  if (value.length > MAX_STORED_SELECTION_LENGTH) return [];
   try {
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
 
     const validated = new Map<string, SelectionItem>();
-    for (const candidate of parsed) {
+    for (const candidate of parsed.slice(0, MAX_SELECTION_LINES * 4)) {
       if (typeof candidate !== 'object' || candidate === null) continue;
       const record = candidate as Record<string, unknown>;
       if (typeof record.productId !== 'string' || !record.productId.trim()) continue;
@@ -32,6 +35,7 @@ export function parseStoredSelection(value: string | null): SelectionItem[] {
       };
       const key = selectionItemKey(item.productId, item.variantId);
       const previous = validated.get(key);
+      if (!previous && validated.size >= MAX_SELECTION_LINES) continue;
       validated.set(key, previous ? { ...previous, quantity: normalizeSelectionQuantity(previous.quantity + item.quantity) } : item);
     }
     return [...validated.values()];
@@ -43,6 +47,7 @@ export function parseStoredSelection(value: string | null): SelectionItem[] {
 export function addSelectionItem(current: SelectionItem[], productId: string, variantId: string | null = null) {
   const key = selectionItemKey(productId, variantId);
   const existing = current.find((item) => selectionItemKey(item.productId, item.variantId) === key);
+  if (!existing && current.length >= MAX_SELECTION_LINES) return current;
   if (!existing) return [...current, { productId, variantId, quantity: 1 }];
   return current.map((item) => selectionItemKey(item.productId, item.variantId) === key
     ? { ...item, quantity: normalizeSelectionQuantity(item.quantity + 1) }

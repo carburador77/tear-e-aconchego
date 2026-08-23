@@ -6,7 +6,7 @@ import { makeProductSlug, sortProductsAlphabetically } from '@/lib/product-utils
 import { createClient } from '@/lib/supabase/client';
 import type { Category, Subcategory } from '@/types/catalog';
 
-type SubcategoryForm = { id?: string; name: string; slug: string; active: boolean };
+type SubcategoryForm = { id?: string; updated_at?: string; name: string; slug: string; active: boolean };
 const emptyForm: SubcategoryForm = { name: '', slug: '', active: true };
 
 function errorMessage(error: unknown, fallback: string) {
@@ -49,7 +49,7 @@ export default function SubcategoriesPage({ params }: { params: Promise<{ id: st
 
   const cancelEdit = () => { setForm(emptyForm); setMessage(''); };
   const edit = (subcategory: Subcategory) => {
-    setForm({ id: subcategory.id, name: subcategory.name, slug: subcategory.slug, active: subcategory.active });
+    setForm({ id: subcategory.id, updated_at: subcategory.updated_at, name: subcategory.name, slug: subcategory.slug, active: subcategory.active });
     setMessage(`Editando: ${subcategory.name}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -60,7 +60,15 @@ export default function SubcategoriesPage({ params }: { params: Promise<{ id: st
     try {
       const values = { category_id: categoryId, name: form.name.trim(), slug: form.slug || makeProductSlug(form.name), active: form.active };
       if (!values.slug) throw new Error('O nome precisa conter pelo menos uma letra ou número.');
-      const result = form.id ? await supabase.from('subcategories').update(values).eq('id', form.id) : await supabase.from('subcategories').insert(values);
+      let result;
+      if (form.id) {
+        let query = supabase.from('subcategories').update(values).eq('id', form.id);
+        if (form.updated_at) query = query.eq('updated_at', form.updated_at);
+        result = await query.select('id').maybeSingle();
+        if (!result.error && !result.data) throw new Error('Esta subcategoria foi alterada em outra aba. Recarregue a página antes de salvar novamente.');
+      } else {
+        result = await supabase.from('subcategories').insert(values);
+      }
       if (result.error) throw result.error;
       setForm(emptyForm);
       setMessage('Subcategoria salva com sucesso.');
@@ -70,8 +78,11 @@ export default function SubcategoriesPage({ params }: { params: Promise<{ id: st
   };
 
   const toggle = async (subcategory: Subcategory) => {
-    const { error } = await supabase.from('subcategories').update({ active: !subcategory.active }).eq('id', subcategory.id);
+    let query = supabase.from('subcategories').update({ active: !subcategory.active }).eq('id', subcategory.id);
+    if (subcategory.updated_at) query = query.eq('updated_at', subcategory.updated_at);
+    const { data, error } = await query.select('id').maybeSingle();
     if (error) { setMessage(error.message); return; }
+    if (!data) { setMessage('Esta subcategoria foi alterada em outra aba. Recarregue a página antes de tentar novamente.'); return; }
     setMessage(subcategory.active ? 'Subcategoria desativada.' : 'Subcategoria ativada.');
     await load();
   };
@@ -81,8 +92,11 @@ export default function SubcategoriesPage({ params }: { params: Promise<{ id: st
     if (countError) { setMessage(countError.message); return; }
     const explanation = count ? ` Ela possui ${count} ${count === 1 ? 'produto vinculado' : 'produtos vinculados'}; os produtos ficarão sem subcategoria.` : '';
     if (!window.confirm(`Excluir a subcategoria “${subcategory.name}”?${explanation}`)) return;
-    const { error } = await supabase.from('subcategories').delete().eq('id', subcategory.id);
+    let deleteQuery = supabase.from('subcategories').delete().eq('id', subcategory.id);
+    if (subcategory.updated_at) deleteQuery = deleteQuery.eq('updated_at', subcategory.updated_at);
+    const { data, error } = await deleteQuery.select('id').maybeSingle();
     if (error) { setMessage(error.message); return; }
+    if (!data) { setMessage('Esta subcategoria foi alterada ou removida em outra aba. Recarregue a página.'); return; }
     if (form.id === subcategory.id) setForm(emptyForm);
     setMessage('Subcategoria excluída. Nenhum produto foi excluído.');
     await load();

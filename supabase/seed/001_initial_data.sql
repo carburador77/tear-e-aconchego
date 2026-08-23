@@ -10,7 +10,7 @@ select id,'Manta Tricô Creme','manta-trico-creme','Manta de tricô em fio creme
 insert into public.benefits (icon,title,description,display_order) values
 ('♡','Produção artesanal','Feito à mão com amor e dedicação',1),('◌','Materiais premium','Selecionamos os melhores materiais para você',2),('▧','Encomendas','Peças personalizadas do seu jeito',3),('♙','Atendimento humanizado','Aqui você é atendido com carinho',4);
 insert into public.site_settings (key,value) values
-('brand','{"name":"Teia & Aconchego","tagline":"ARTE EM CADA DETALHE","footer":"Teia & Aconchego – Arte em cada detalhe"}'),
+('brand','{"name":"Tear & Aconchego","tagline":"ARTE EM CADA DETALHE","footer":"Tear & Aconchego – Arte em cada detalhe"}'),
 ('hero','{"title":"Feito à mão. Pensado para acolher.","description":"Peças artesanais que levam beleza, aconchego e personalidade para o seu lar.","buttonText":"CONHEÇA O CATÁLOGO","imageUrl":"https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1600&q=85"}'),
 ('contact','{"whatsappUrl":"https://wa.me/5547999999999","phone":"(47) 99999-9999"}'),
 ('theme','{"forest":"#52604a","cream":"#f5f0e8","sand":"#e7dbca","clay":"#997245"}')

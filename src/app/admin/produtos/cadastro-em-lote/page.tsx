@@ -22,6 +22,15 @@ function getErrorCode(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' ? error.code : '';
 }
 
+async function cleanupUploadedImage(url: string) {
+  try {
+    await removeImage(url);
+    return '';
+  } catch (error) {
+    return getErrorMessage(error, 'Não foi possível remover a imagem enviada.');
+  }
+}
+
 export default function BatchProductsPage() {
   const supabase = useMemo(() => createClient(), []);
   const previewUrls = useRef(new Set<string>());
@@ -146,20 +155,25 @@ export default function BatchProductsPage() {
         const slug = nextAvailableProductSlug(baseSlug, unavailableSlugs);
         const enteredPrice = item.price.trim();
         const parsedPrice = enteredPrice ? Number(enteredPrice.replace(',', '.')) : null;
-        const priceLabel = enteredPrice && Number.isNaN(parsedPrice) ? enteredPrice : '';
+        const numericPrice = parsedPrice !== null && Number.isFinite(parsedPrice);
+        if (numericPrice && parsedPrice < 0) throw new Error('O preço não pode ser negativo.');
+        const priceLabel = enteredPrice && !numericPrice ? enteredPrice : '';
+        if (priceLabel.length > 100) throw new Error('O texto do preço deve ter no máximo 100 caracteres.');
         uploadedImage = await uploadImage(item.file, 'products');
-        const { data, error } = await supabase.from('products').insert({ category_id: item.categoryId, ...(subcategoriesReady ? { subcategory_id: item.subcategoryId || null } : {}), name: item.name.trim(), slug, description: '', price: priceLabel ? null : parsedPrice, image_url: uploadedImage, origin: null, dimensions: null, care: null, whatsapp_url: null, display_order: nextDisplayOrder, active: true }).select('id').single();
-        if (error) throw error;
-        createdProductId = data.id;
+        const productRow = { category_id: item.categoryId, ...(subcategoriesReady ? { subcategory_id: item.subcategoryId || null } : {}), name: item.name.trim(), slug, description: '', price: priceLabel ? null : parsedPrice, image_url: uploadedImage, origin: null, dimensions: null, care: null, whatsapp_url: null, display_order: nextDisplayOrder, active: true };
+        const insertResult = await supabase.from('products').insert(productRow).select('id').single();
+        if (insertResult.error) throw insertResult.error;
+        createdProductId = insertResult.data.id;
         try {
           await savePriceLabel(createdProductId, priceLabel);
         } catch (priceError) {
           const { error: rollbackError } = await supabase.from('products').delete().eq('id', createdProductId);
           if (!rollbackError) {
             createdProductId = '';
-            await removeImage(uploadedImage);
+            const cleanupError = await cleanupUploadedImage(uploadedImage);
             uploadedImage = '';
-            throw priceError;
+            const suffix = cleanupError ? ` O produto foi desfeito, mas a imagem enviada precisa de limpeza manual: ${cleanupError}` : '';
+            throw new Error(`${getErrorMessage(priceError, 'Não foi possível salvar o texto do preço.')}${suffix}`);
           }
           unavailableSlugs.add(slug); unavailableNames.add(comparableProductName(item.name));
           setExistingProducts((current) => [...current, { id: createdProductId, name: item.name.trim(), slug, display_order: nextDisplayOrder }]);
@@ -174,9 +188,10 @@ export default function BatchProductsPage() {
         success += 1;
         nextDisplayOrder += 1;
       } catch (error) {
-        if (uploadedImage && !createdProductId) await removeImage(uploadedImage);
+        const cleanupError = uploadedImage && !createdProductId ? await cleanupUploadedImage(uploadedImage) : '';
         const errorMessage = getErrorCode(error) === '23505' ? 'Já existe um produto com este endereço. Altere o nome ou autorize a duplicidade e tente novamente.' : getErrorMessage(error, 'Não foi possível cadastrar este produto.');
-        setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status: 'error', error: errorMessage } : currentItem));
+        const cleanupSuffix = cleanupError ? ` A imagem enviada também não pôde ser removida: ${cleanupError}` : '';
+        setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status: 'error', error: `${errorMessage}${cleanupSuffix}` } : currentItem));
         errors += 1;
       }
     }

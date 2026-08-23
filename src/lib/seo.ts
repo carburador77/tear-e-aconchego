@@ -15,10 +15,22 @@ export function metadataDescription(value?: string | null, fallback = DEFAULT_DE
 
 export function validImageUrl(value?: string | null) {
   try {
-    return value && new URL(value).protocol.startsWith('http') ? value : undefined;
+    if (!value) return undefined;
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined;
   } catch {
     return undefined;
   }
+}
+
+export function serializeJsonLd(value: unknown) {
+  const serialized = JSON.stringify(value) ?? 'null';
+  return serialized
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 export function publicMetadata({ title, description, path, image, type = 'website', absoluteTitle = false }: { title: string; description: string; path: string; image?: string | null; type?: 'website' | 'article'; absoluteTitle?: boolean }): Metadata {

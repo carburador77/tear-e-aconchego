@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { comparableProductName, sortProductsAlphabetically } from '@/lib/product-utils';
 import { getProductNameCorrections } from '@/lib/product-name-normalization';
+import { addCustomPriceText } from '@/lib/product-price-labels';
 import { createClient } from '@/lib/supabase/client';
-import type { Category, Product, Subcategory } from '@/types/catalog';
+import type { CatalogProduct, Category, Product, Subcategory } from '@/types/catalog';
 
 type CompletionFilter = 'all' | 'incomplete' | 'description' | 'price' | 'subcategory';
 type EditableField = 'name' | 'category_id' | 'subcategory_id' | 'price' | 'description' | 'origin' | 'dimensions' | 'care';
@@ -20,7 +21,7 @@ type PendingChange = {
   care?: string | null;
 };
 type CopyFields = Record<EditableField, boolean>;
-type ProductView = Product & { priceInput: string };
+type ProductView = CatalogProduct & { priceInput: string };
 type ImportMatch = 'exact' | 'duplicate' | 'not_found' | 'manual';
 type ImportRow = { id: string; productName: string; description: string; matchedProductId: string; candidateIds: string[]; match: ImportMatch; note: string; ignored: boolean; error: string };
 type ImportPreviewRow = ImportRow & { product?: ProductView; status: 'ready' | 'not_found' | 'conflict' | 'ignored' | 'error'; statusLabel: string };
@@ -33,8 +34,8 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function productPriceInput(product: Product) {
-  if (product.price_label?.trim()) return product.price_label.trim();
+function productPriceInput(product: CatalogProduct) {
+  if (product.custom_price_text?.trim()) return product.custom_price_text.trim();
   return product.price == null ? '' : String(product.price).replace('.', ',');
 }
 
@@ -46,7 +47,7 @@ function normalizedValue(field: EditableField, value: string | null) {
   return (value ?? '').trim() || null;
 }
 
-function originalValue(product: Product, field: EditableField) {
+function originalValue(product: CatalogProduct, field: EditableField) {
   if (field === 'name') return product.name.trim();
   if (field === 'price') return productPriceInput(product);
   if (field === 'subcategory_id') return product.subcategory_id;
@@ -55,7 +56,7 @@ function originalValue(product: Product, field: EditableField) {
   return (product[field] ?? '').trim() || null;
 }
 
-function effectiveProduct(product: Product, change?: PendingChange): ProductView {
+function effectiveProduct(product: CatalogProduct, change?: PendingChange): ProductView {
   const has = (field: keyof PendingChange) => Boolean(change && Object.prototype.hasOwnProperty.call(change, field));
   return {
     ...product,
@@ -98,7 +99,7 @@ export default function BatchEditProductsPage() {
   const [supabase] = useState(() => createClient());
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [pending, setPending] = useState<Record<string, PendingChange>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
@@ -128,7 +129,7 @@ export default function BatchEditProductsPage() {
     void Promise.all([
       supabase.from('categories').select('*').order('display_order'),
       supabase.from('subcategories').select('*').order('name'),
-      supabase.from('products').select('id,category_id,subcategory_id,name,slug,description,price,image_url,origin,dimensions,care,whatsapp_url,display_order,active').order('name'),
+      supabase.from('products').select('*').order('name'),
       supabase.from('site_settings').select('value').eq('key', 'product_price_labels').maybeSingle(),
     ]).then(([categoryResult, subcategoryResult, productResult, labelsResult]) => {
       if (categoryResult.error) throw categoryResult.error;
@@ -139,7 +140,7 @@ export default function BatchEditProductsPage() {
       const labels = (labelsResult.data?.value ?? {}) as Record<string, string>;
       setCategories(categoryResult.data as Category[]);
       setSubcategories(sortProductsAlphabetically(subcategoryResult.data as Subcategory[]));
-      setProducts(sortProductsAlphabetically((productResult.data as Product[]).map((product) => ({ ...product, price_label: labels[product.id] ?? null }))));
+      setProducts(sortProductsAlphabetically(addCustomPriceText(productResult.data as Product[], labels)));
     }).catch((error: unknown) => { if (active) setMessage(errorMessage(error, 'Não foi possível carregar os produtos.')); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [supabase]);
@@ -290,17 +291,24 @@ export default function BatchEditProductsPage() {
     if (!ready.length || importApplying) { setImportMessage('Não há descrições prontas para atualizar.'); return; }
     if (!window.confirm(`${ready.length} ${ready.length === 1 ? 'produto terá' : 'produtos terão'} suas descrições atualizadas. Deseja continuar?`)) return;
     setImportApplying(true); setImportMessage('Aplicando descrições...');
-    const succeeded = new Map<string, string>();
+    const succeeded = new Map<string, { description: string; updated_at?: string }>();
     const failed = new Map<string, string>();
     for (const row of ready) {
-      const { error } = await supabase.from('products').update({ description: row.description.trim() }).eq('id', row.matchedProductId).select('id').single();
-      if (error) failed.set(row.id, error.message); else succeeded.set(row.matchedProductId, row.description.trim());
+      let updateQuery = supabase.from('products').update({ description: row.description.trim() }).eq('id', row.matchedProductId);
+      if (row.product?.updated_at) updateQuery = updateQuery.eq('updated_at', row.product.updated_at);
+      const { data, error } = await updateQuery.select('id,updated_at').maybeSingle();
+      if (error) failed.set(row.id, error.message);
+      else if (!data) failed.set(row.id, 'Este produto foi alterado em outra aba ou sessão. Recarregue antes de tentar novamente.');
+      else succeeded.set(row.matchedProductId, { description: row.description.trim(), updated_at: data.updated_at });
     }
     if (succeeded.size) {
-      setProducts((current) => sortProductsAlphabetically(current.map((product) => succeeded.has(product.id) ? { ...product, description: succeeded.get(product.id) ?? product.description } : product)));
+      setProducts((current) => sortProductsAlphabetically(current.map((product) => {
+        const saved = succeeded.get(product.id);
+        return saved ? { ...product, description: saved.description, updated_at: saved.updated_at ?? product.updated_at } : product;
+      })));
       setPending((current) => {
         const next = { ...current };
-        succeeded.forEach((_description, productId) => {
+        succeeded.forEach((_saved, productId) => {
           if (!next[productId]) return;
           const change = { ...next[productId] };
           delete change.description;
@@ -383,7 +391,7 @@ export default function BatchEditProductsPage() {
     setSaving(true); setMessage(''); setFailures([]);
     const succeeded: string[] = [];
     const failed: string[] = [];
-    const updatedProducts = new Map<string, Product>();
+    const updatedProducts = new Map<string, CatalogProduct>();
     for (const [productId, change] of entries) {
       const product = products.find((item) => item.id === productId);
       if (!product) continue;
@@ -400,13 +408,23 @@ export default function BatchEditProductsPage() {
         if (change.price !== undefined) {
           const enteredPrice = change.price.trim();
           const parsedPrice = enteredPrice ? Number(enteredPrice.replace(',', '.')) : null;
-          priceLabel = enteredPrice && Number.isNaN(parsedPrice) ? enteredPrice : '';
+          const numericPrice = parsedPrice !== null && Number.isFinite(parsedPrice);
+          if (numericPrice && parsedPrice < 0) throw new Error('o preço não pode ser negativo');
+          priceLabel = enteredPrice && !numericPrice ? enteredPrice : '';
+          if (priceLabel.length > 100) throw new Error('o texto do preço deve ter no máximo 100 caracteres');
           row.price = priceLabel ? null : parsedPrice;
         }
-        const { data, error } = await supabase.from('products').update(row).eq('id', productId).select('*').single();
-        if (error) throw error;
+        const persist = (values: Record<string, string | number | null>) => {
+          let query = supabase.from('products').update(values).eq('id', productId);
+          if (product.updated_at) query = query.eq('updated_at', product.updated_at);
+          return query.select('*').maybeSingle();
+        };
+        const updateResult = await persist(row);
+        if (updateResult.error) throw updateResult.error;
+        if (!updateResult.data) throw new Error('o produto foi alterado em outra aba; recarregue antes de salvar');
         if (priceLabel !== undefined) await savePriceLabel(productId, priceLabel);
-        updatedProducts.set(productId, { ...(data as Product), price_label: priceLabel !== undefined ? priceLabel || null : product.price_label });
+        const data = updateResult.data;
+        updatedProducts.set(productId, { ...(data as Product), custom_price_text: priceLabel !== undefined ? priceLabel || null : product.custom_price_text });
         succeeded.push(productId);
       } catch (error) {
         failed.push(`${product.name}: ${errorMessage(error, 'não foi possível atualizar')}`);

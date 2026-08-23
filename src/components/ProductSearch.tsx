@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ProductCatalogCard from '@/components/ProductCatalogCard';
-import type { Product } from '@/types/catalog';
+import type { CatalogProduct } from '@/types/catalog';
 
 const normalizeSearchText = (value: string) => value
   .normalize('NFD')
@@ -12,7 +12,7 @@ const normalizeSearchText = (value: string) => value
   .replace(/\s+/g, ' ')
   .trim();
 
-type ProductSearchProps = { products: Product[]; initialQuery?: string; showCategory?: boolean };
+type ProductSearchProps = { products: CatalogProduct[]; initialQuery?: string; showCategory?: boolean };
 
 export default function ProductSearch({ products, initialQuery = '', showCategory = false }: ProductSearchProps) {
   const [query, setQuery] = useState(initialQuery);

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { getSettings } from '@/lib/catalog';
-import { absoluteUrl, DEFAULT_DESCRIPTION, SITE_NAME } from '@/lib/seo';
+import { getDefaultSettings, getSettings } from '@/lib/catalog';
+import { absoluteUrl, DEFAULT_DESCRIPTION, serializeJsonLd, SITE_NAME } from '@/lib/seo';
 import { getInstagramUrl } from '@/lib/social';
 import SelectionProvider from '@/components/SelectionProvider';
 
@@ -27,13 +27,29 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const settings=await getSettings(); const theme=(settings.theme ?? {}) as {forest?:string;cream?:string;sand?:string;clay?:string;text?:string;textMuted?:string;textOnDark?:string;brandText?:string;buttonText?:string}; const social=(settings.social ?? {}) as {instagramUrl?:string}; const instagramUrl=getInstagramUrl(social.instagramUrl);
+  // Falhas do layout raiz não são capturadas pelo error.tsx deste segmento.
+  // As páginas continuam propagando o erro, mas o invólucro usa um tema seguro.
+  const settings = await getSettings().catch(() => getDefaultSettings());
+  const { theme, social } = settings;
+  const instagramUrl = getInstagramUrl(social.instagramUrl);
+  const organizationJsonLd = serializeJsonLd({
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: SITE_NAME,
+    url: absoluteUrl('/'),
+    ...(instagramUrl ? { sameAs: [instagramUrl] } : {}),
+  });
+
   return (
     <html
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col"><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: absoluteUrl('/'), ...(instagramUrl ? { sameAs: [instagramUrl] } : {}) }) }} /><style>{`:root{--catalog-forest:${theme.forest??'#52604a'};--catalog-cream:${theme.cream??'#f5f0e8'};--catalog-sand:${theme.sand??'#e7dbca'};--catalog-clay:${theme.clay??'#997245'};--catalog-text:${theme.text??'#39362f'};--catalog-muted:${theme.textMuted??'#766d63'};--catalog-on-dark:${theme.textOnDark??'#f6f0e7'};--catalog-brand-text:${theme.brandText??'#f6f0e7'};--catalog-button-text:${theme.buttonText??'#ffffff'}}`}</style><SelectionProvider>{children}</SelectionProvider></body>
+      <body className="min-h-full flex flex-col">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: organizationJsonLd }} />
+        <style>{`:root{--catalog-forest:${theme.forest};--catalog-cream:${theme.cream};--catalog-sand:${theme.sand};--catalog-clay:${theme.clay};--catalog-text:${theme.text};--catalog-muted:${theme.textMuted};--catalog-on-dark:${theme.textOnDark};--catalog-brand-text:${theme.brandText};--catalog-button-text:${theme.buttonText}}`}</style>
+        <SelectionProvider>{children}</SelectionProvider>
+      </body>
     </html>
   );
 }

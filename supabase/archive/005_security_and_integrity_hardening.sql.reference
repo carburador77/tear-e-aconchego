@@ -1,0 +1,328 @@
+-- REFERÊNCIA FUTURA: este arquivo não faz parte do fluxo atual de migrations 001–004.
+-- Reavalie e faça backup antes de transformá-lo novamente em uma migration executável.
+-- Reforços aditivos identificados na auditoria de produção.
+
+begin;
+
+alter table public.products
+  add column if not exists price_label text;
+
+update public.products as product
+set price_label = nullif(btrim(settings.value ->> product.id::text), '')
+from public.site_settings as settings
+where settings.key = 'product_price_labels'
+  and product.price_label is null
+  and settings.value ? product.id::text;
+
+alter table public.products
+  drop constraint if exists products_price_nonnegative,
+  add constraint products_price_nonnegative
+    check (price is null or price >= 0) not valid,
+  drop constraint if exists products_price_label_length,
+  add constraint products_price_label_length
+    check (price_label is null or char_length(price_label) <= 100) not valid,
+  drop constraint if exists products_name_valid,
+  add constraint products_name_valid
+    check (btrim(name) <> '' and char_length(name) <= 160) not valid,
+  drop constraint if exists products_slug_valid,
+  add constraint products_slug_valid
+    check (slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$') not valid;
+
+alter table public.product_variants
+  drop constraint if exists product_variants_default_must_be_active,
+  add constraint product_variants_default_must_be_active
+    check (not is_default or active) not valid,
+  drop constraint if exists product_variants_color_name_valid,
+  add constraint product_variants_color_name_valid
+    check (btrim(color_name) <> '' and char_length(color_name) <= 80) not valid;
+
+alter table public.profiles
+  alter column role drop default;
+
+drop trigger if exists benefits_touch on public.benefits;
+create trigger benefits_touch
+before update on public.benefits
+for each row execute function public.touch_updated_at();
+
+drop trigger if exists site_settings_touch on public.site_settings;
+create trigger site_settings_touch
+before update on public.site_settings
+for each row execute function public.touch_updated_at();
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and role = 'admin'
+  )
+$$;
+
+revoke all on function public.is_admin() from public;
+revoke all on function public.is_admin() from anon;
+grant execute on function public.is_admin() to authenticated;
+
+-- Policies públicas não chamam is_admin(); a policy administrativa separada
+-- concede acesso a registros inativos somente ao papel autenticado autorizado.
+drop policy if exists "public reads active categories" on public.categories;
+drop policy if exists "public reads active products" on public.products;
+drop policy if exists "public reads active products with active category" on public.products;
+drop policy if exists "public reads active benefits" on public.benefits;
+drop policy if exists "public reads site settings" on public.site_settings;
+drop policy if exists "public reads catalog settings" on public.site_settings;
+drop policy if exists "public reads active variants" on public.product_variants;
+drop policy if exists "public reads active variants with active product" on public.product_variants;
+drop policy if exists "public reads active subcategories" on public.subcategories;
+drop policy if exists "public reads active subcategories with active category" on public.subcategories;
+drop policy if exists "admins manage categories" on public.categories;
+drop policy if exists "admins manage products" on public.products;
+drop policy if exists "admins manage benefits" on public.benefits;
+drop policy if exists "admins manage settings" on public.site_settings;
+drop policy if exists "admins manage variants" on public.product_variants;
+drop policy if exists "admins manage subcategories" on public.subcategories;
+drop policy if exists "users read own profile" on public.profiles;
+
+create policy "public reads active categories"
+on public.categories for select
+to anon, authenticated
+using (active);
+
+create policy "public reads active products with active category"
+on public.products for select
+to anon, authenticated
+using (
+  active
+  and exists (
+    select 1
+    from public.categories
+    where categories.id = products.category_id
+      and categories.active
+  )
+);
+
+create policy "public reads active benefits"
+on public.benefits for select
+to anon, authenticated
+using (active);
+
+create policy "public reads catalog settings"
+on public.site_settings for select
+to anon, authenticated
+using (key in ('brand', 'hero', 'contact', 'social', 'theme', 'product_price_labels'));
+
+create policy "public reads active subcategories with active category"
+on public.subcategories for select
+to anon, authenticated
+using (
+  active
+  and exists (
+    select 1
+    from public.categories
+    where categories.id = subcategories.category_id
+      and categories.active
+  )
+);
+
+create policy "public reads active variants with active product"
+on public.product_variants for select
+to anon, authenticated
+using (
+  active
+  and exists (
+    select 1
+    from public.products
+    join public.categories on categories.id = products.category_id
+    where products.id = product_variants.product_id
+      and products.active
+      and categories.active
+  )
+);
+
+create policy "admins manage categories"
+on public.categories for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "admins manage products"
+on public.products for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "admins manage benefits"
+on public.benefits for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "admins manage settings"
+on public.site_settings for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "admins manage variants"
+on public.product_variants for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "admins manage subcategories"
+on public.subcategories for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+create policy "users read own profile"
+on public.profiles for select
+to authenticated
+using (id = auth.uid());
+
+-- Impede que uma subcategoria com produtos seja movida para outra categoria
+-- e deixe os vínculos existentes inconsistentes.
+create or replace function public.prevent_used_subcategory_category_change()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.category_id is distinct from old.category_id
+    and exists (
+      select 1
+      from public.products
+      where products.subcategory_id = old.id
+    )
+  then
+    raise exception 'Uma subcategoria com produtos vinculados não pode mudar de categoria.'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists subcategories_prevent_category_change on public.subcategories;
+create trigger subcategories_prevent_category_change
+before update of category_id on public.subcategories
+for each row execute function public.prevent_used_subcategory_category_change();
+
+-- Atualiza todas as seções da configuração em uma única transação e detecta
+-- edição concorrente pelas revisões recebidas pelo painel.
+create or replace function public.update_catalog_settings(changes jsonb)
+returns table(setting_key text, setting_updated_at timestamptz)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  change jsonb;
+  target_key text;
+  target_value jsonb;
+  expected_revision timestamptz;
+  saved_revision timestamptz;
+  affected_rows integer;
+begin
+  if not public.is_admin() then
+    raise exception 'Acesso administrativo necessário.' using errcode = '42501';
+  end if;
+  if jsonb_typeof(changes) is distinct from 'array' then
+    raise exception 'O conjunto de configurações deve ser uma lista.' using errcode = '22023';
+  end if;
+
+  for change in select value from jsonb_array_elements(changes)
+  loop
+    target_key := change ->> 'key';
+    target_value := change -> 'value';
+    if target_key is null
+      or target_key not in ('brand', 'hero', 'contact', 'social', 'theme')
+      or jsonb_typeof(target_value) is distinct from 'object'
+    then
+      raise exception 'Configuração inválida.' using errcode = '22023';
+    end if;
+
+    if nullif(change ->> 'expectedUpdatedAt', '') is not null then
+      expected_revision := (change ->> 'expectedUpdatedAt')::timestamptz;
+      update public.site_settings
+      set value = target_value
+      where key = target_key
+        and updated_at = expected_revision
+      returning updated_at into saved_revision;
+      get diagnostics affected_rows = row_count;
+      if affected_rows <> 1 then
+        raise exception 'As configurações foram alteradas em outra sessão.' using errcode = '40001';
+      end if;
+    else
+      begin
+        insert into public.site_settings (key, value)
+        values (target_key, target_value)
+        returning updated_at into saved_revision;
+      exception when unique_violation then
+        raise exception 'As configurações foram alteradas em outra sessão.' using errcode = '40001';
+      end;
+    end if;
+
+    setting_key := target_key;
+    setting_updated_at := saved_revision;
+    return next;
+  end loop;
+end;
+$$;
+
+revoke all on function public.update_catalog_settings(jsonb) from public;
+revoke all on function public.update_catalog_settings(jsonb) from anon;
+grant execute on function public.update_catalog_settings(jsonb) to authenticated;
+
+-- O bucket continua público para download por URL, mas deixa de ser enumerável
+-- anonimamente. Escritas ficam limitadas a admins, pastas conhecidas e imagens.
+update storage.buckets
+set file_size_limit = 5242880,
+    allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp']
+where id = 'catalog-images';
+
+drop policy if exists "public reads catalog images" on storage.objects;
+drop policy if exists "admins manage catalog images" on storage.objects;
+drop policy if exists "admins list catalog images" on storage.objects;
+drop policy if exists "admins upload catalog images" on storage.objects;
+drop policy if exists "admins update catalog images" on storage.objects;
+drop policy if exists "admins delete catalog images" on storage.objects;
+
+create policy "admins list catalog images"
+on storage.objects for select
+to authenticated
+using (bucket_id = 'catalog-images' and public.is_admin());
+
+create policy "admins upload catalog images"
+on storage.objects for insert
+to authenticated
+with check (
+  bucket_id = 'catalog-images'
+  and public.is_admin()
+  and (storage.foldername(name))[1] in ('products', 'categories', 'site')
+  and lower(storage.extension(name)) in ('jpg', 'jpeg', 'png', 'webp')
+);
+
+create policy "admins update catalog images"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'catalog-images' and public.is_admin())
+with check (
+  bucket_id = 'catalog-images'
+  and public.is_admin()
+  and (storage.foldername(name))[1] in ('products', 'categories', 'site')
+  and lower(storage.extension(name)) in ('jpg', 'jpeg', 'png', 'webp')
+);
+
+create policy "admins delete catalog images"
+on storage.objects for delete
+to authenticated
+using (bucket_id = 'catalog-images' and public.is_admin());
+
+notify pgrst, 'reload schema';
+
+commit;

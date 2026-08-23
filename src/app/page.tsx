@@ -7,15 +7,13 @@ import { metadataDescription, publicMetadata } from '@/lib/seo';
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSettings();
-  const hero = settings.hero as { description?: string; imageUrl?: string };
+  const { hero } = settings;
   return publicMetadata({ title: 'Tear & Aconchego | Decoração Artesanal', description: metadataDescription(hero.description), path: '/', image: hero.imageUrl, absoluteTitle: true });
 }
 
 export default async function Home() {
   const [s, c, b] = await Promise.all([getSettings(), getCategories(), getBenefits()]);
-  const hero = s.hero as { title: string; description: string; buttonText: string; imageUrl: string };
-  const brand = s.brand as { name: string; tagline: string; footer: string };
-  const contact = s.contact as { whatsappUrl: string; phone: string };
+  const { hero, brand, contact } = s;
 
   return <main className="min-h-screen bg-[#eee7dd] text-[#39362f]">
     <div className="mx-auto min-h-screen max-w-[1320px] bg-[#f5f0e8]">
@@ -33,8 +31,8 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="px-7 py-14 md:px-16 lg:px-20 lg:py-18"><h2 className="mb-8 text-center font-serif text-2xl uppercase tracking-wider">Nossas peças</h2><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{c.map(x => <Link key={x.id} href={`/catalogo/${x.slug}`} className="overflow-hidden rounded border border-[#d9cebf] bg-[#f8f4ed]"><img className="h-56 w-full object-cover transition hover:scale-105" src={x.image_url ?? ''} alt="" /><div className="p-4"><h3 className="text-sm font-bold uppercase">{x.name}</h3><p className="mt-2 text-sm">{x.description}</p><span className="mt-4 inline-block rounded bg-[#87623d] px-3 py-2 text-[10px] font-bold text-white">VER PEÇAS</span></div></Link>)}</div></section>
-      <section className="border-t border-[#d9cebf] px-7 py-14 md:px-16 lg:px-20"><div className="mx-auto max-w-5xl"><h2 className="text-center font-serif text-2xl uppercase tracking-wider">Como encomendar</h2><div className="mt-9 grid gap-8 md:grid-cols-3 md:gap-12"><div><span className="font-serif text-lg text-[#87623d]">01</span><h3 className="mt-3 font-serif text-xl">Escolha sua peça</h3><p className="mt-2 text-sm leading-relaxed">Explore o catálogo e encontre a peça que combina com seu ambiente.</p></div><div><span className="font-serif text-lg text-[#87623d]">02</span><h3 className="mt-3 font-serif text-xl">Consulte as opções</h3><p className="mt-2 text-sm leading-relaxed">Confira as cores disponíveis e fale conosco sobre possibilidades de personalização.</p></div><div><span className="font-serif text-lg text-[#87623d]">03</span><h3 className="mt-3 font-serif text-xl">Faça sua encomenda</h3><p className="mt-2 text-sm leading-relaxed">Entre em contato pelo WhatsApp para confirmar os detalhes e realizar sua encomenda.</p><a href={contact.whatsappUrl} className="mt-4 inline-block text-xs font-bold underline underline-offset-4">FALAR PELO WHATSAPP ↗</a></div></div></div></section>
+      <section className="px-7 py-14 md:px-16 lg:px-20 lg:py-18"><h2 className="mb-8 text-center font-serif text-2xl uppercase tracking-wider">Nossas peças</h2><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{c.map(x => <Link key={x.id} href={`/catalogo/${x.slug}`} className="overflow-hidden rounded border border-[#d9cebf] bg-[#f8f4ed]"><img className="h-56 w-full object-cover transition hover:scale-105" src={x.image_url ?? ''} alt={`Categoria ${x.name}`} width="900" height="504" loading="lazy" decoding="async" /><div className="p-4"><h3 className="text-sm font-bold uppercase">{x.name}</h3><p className="mt-2 text-sm">{x.description}</p><span className="mt-4 inline-block rounded bg-[#87623d] px-3 py-2 text-[10px] font-bold text-white">VER PEÇAS</span></div></Link>)}</div></section>
+      <section className="border-t border-[#d9cebf] px-7 py-14 md:px-16 lg:px-20"><div className="mx-auto max-w-5xl"><h2 className="text-center font-serif text-2xl uppercase tracking-wider">Como encomendar</h2><div className="mt-9 grid gap-8 md:grid-cols-3 md:gap-12"><div><span className="font-serif text-lg text-[#87623d]">01</span><h3 className="mt-3 font-serif text-xl">Escolha sua peça</h3><p className="mt-2 text-sm leading-relaxed">Explore o catálogo e encontre a peça que combina com seu ambiente.</p></div><div><span className="font-serif text-lg text-[#87623d]">02</span><h3 className="mt-3 font-serif text-xl">Consulte as opções</h3><p className="mt-2 text-sm leading-relaxed">Confira as cores disponíveis e fale conosco sobre possibilidades de personalização.</p></div><div><span className="font-serif text-lg text-[#87623d]">03</span><h3 className="mt-3 font-serif text-xl">Faça sua encomenda</h3><p className="mt-2 text-sm leading-relaxed">Entre em contato pelo WhatsApp para confirmar os detalhes e realizar sua encomenda.</p><a href={contact.whatsappUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-xs font-bold underline underline-offset-4">FALAR PELO WHATSAPP ↗</a></div></div></div></section>
       <section className="grid gap-5 bg-[#e7dbca] px-7 py-10 sm:grid-cols-2 lg:grid-cols-4 md:px-16">{b.map(x => <div key={x.id} className="grid grid-cols-[38px_1fr] gap-2"><span className="text-2xl">{x.icon}</span><div><strong className="text-xs uppercase">{x.title}</strong><p className="text-xs">{x.description}</p></div></div>)}</section>
       <PublicFooter />
     </div>
