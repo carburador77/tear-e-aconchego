@@ -47,9 +47,17 @@ button { cursor: pointer; }
 .bg-\[\#87623d\], .bg-\[\#8a785d\] { background-color: var(--catalog-clay) !important; }
 .text-\[\#52604a\] { color: var(--catalog-forest) !important; }
 .text-white { color: var(--catalog-on-dark) !important; }
-.bg-\[\#52604a\] .font-serif, header .font-serif { color: var(--catalog-brand-text) !important; }
+.bg-\[\#52604a\] .font-serif { color: var(--catalog-brand-text) !important; }
 .bg-\[\#52604a\], .bg-\[\#87623d\], .bg-\[\#8a785d\] { color: var(--catalog-button-text) !important; }
 .text-sm, .text-xs, p { color: var(--catalog-muted); }
+
+.catalog-header { background-color: var(--catalog-header-background); }
+.catalog-header-brand { color: var(--catalog-brand-text); }
+.catalog-header-link { color: var(--catalog-header-nav-text); }
+.catalog-header-link[aria-current='page'] { color: var(--catalog-header-nav-active); }
+.catalog-header-link:hover { color: var(--catalog-header-nav-hover); }
+.catalog-header-whatsapp { color: var(--catalog-header-whatsapp-text); }
+.catalog-header-whatsapp:hover { color: var(--catalog-header-nav-hover); }
 
 /* Produtos devem preservar a proporção da foto no celular, sem cortes. */
 @media (max-width: 767px) {

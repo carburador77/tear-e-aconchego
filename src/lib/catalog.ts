@@ -23,6 +23,11 @@ export type CatalogSettings = SettingsObject & {
     textOnDark: string;
     brandText: string;
     buttonText: string;
+    headerBackground: string;
+    headerNavText: string;
+    headerNavActive: string;
+    headerNavHover: string;
+    headerWhatsappText: string;
   };
 };
 
@@ -44,6 +49,11 @@ const DEFAULT_THEME = {
   textOnDark: '#f6f0e7',
   brandText: '#f6f0e7',
   buttonText: '#ffffff',
+  headerBackground: '#52604a',
+  headerNavText: '#ffffff',
+  headerNavActive: '#ffffff',
+  headerNavHover: '#ffffff',
+  headerWhatsappText: '#ffffff',
 };
 
 const categories: Category[] = [
@@ -114,9 +124,9 @@ function settingText(object: SettingsObject, key: string, fallback: string, allo
   return allowEmpty || value.trim() ? value : fallback;
 }
 
-function settingColor(object: SettingsObject, key: keyof typeof DEFAULT_THEME) {
+function settingColor(object: SettingsObject, key: string, fallback: string) {
   const value = object[key];
-  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : DEFAULT_THEME[key];
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 }
 
 function safeHttpUrl(value: unknown, fallback: string) {
@@ -138,6 +148,16 @@ function normalizeSettings(raw: SettingsObject): CatalogSettings {
   const whatsappNumber = normalizeWhatsAppNumber(
     settingText(contact, 'whatsappNumber', settingText(contact, 'whatsappUrl', DEFAULT_WHATSAPP_NUMBER)),
   );
+
+  const forest = settingColor(theme, 'forest', DEFAULT_THEME.forest);
+  const cream = settingColor(theme, 'cream', DEFAULT_THEME.cream);
+  const sand = settingColor(theme, 'sand', DEFAULT_THEME.sand);
+  const clay = settingColor(theme, 'clay', DEFAULT_THEME.clay);
+  const text = settingColor(theme, 'text', DEFAULT_THEME.text);
+  const textMuted = settingColor(theme, 'textMuted', DEFAULT_THEME.textMuted);
+  const textOnDark = settingColor(theme, 'textOnDark', DEFAULT_THEME.textOnDark);
+  const brandText = settingColor(theme, 'brandText', DEFAULT_THEME.brandText);
+  const buttonText = settingColor(theme, 'buttonText', DEFAULT_THEME.buttonText);
 
   return {
     ...raw,
@@ -161,15 +181,20 @@ function normalizeSettings(raw: SettingsObject): CatalogSettings {
       instagramUrl: settingText(social, 'instagramUrl', ''),
     },
     theme: {
-      forest: settingColor(theme, 'forest'),
-      cream: settingColor(theme, 'cream'),
-      sand: settingColor(theme, 'sand'),
-      clay: settingColor(theme, 'clay'),
-      text: settingColor(theme, 'text'),
-      textMuted: settingColor(theme, 'textMuted'),
-      textOnDark: settingColor(theme, 'textOnDark'),
-      brandText: settingColor(theme, 'brandText'),
-      buttonText: settingColor(theme, 'buttonText'),
+      forest,
+      cream,
+      sand,
+      clay,
+      text,
+      textMuted,
+      textOnDark,
+      brandText,
+      buttonText,
+      headerBackground: settingColor(theme, 'headerBackground', forest),
+      headerNavText: settingColor(theme, 'headerNavText', buttonText),
+      headerNavActive: settingColor(theme, 'headerNavActive', buttonText),
+      headerNavHover: settingColor(theme, 'headerNavHover', buttonText),
+      headerWhatsappText: settingColor(theme, 'headerWhatsappText', buttonText),
     },
   };
 }

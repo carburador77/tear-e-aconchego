@@ -47,7 +47,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: organizationJsonLd }} />
-        <style>{`:root{--catalog-forest:${theme.forest};--catalog-cream:${theme.cream};--catalog-sand:${theme.sand};--catalog-clay:${theme.clay};--catalog-text:${theme.text};--catalog-muted:${theme.textMuted};--catalog-on-dark:${theme.textOnDark};--catalog-brand-text:${theme.brandText};--catalog-button-text:${theme.buttonText}}`}</style>
+        <style>{`:root{--catalog-forest:${theme.forest};--catalog-cream:${theme.cream};--catalog-sand:${theme.sand};--catalog-clay:${theme.clay};--catalog-text:${theme.text};--catalog-muted:${theme.textMuted};--catalog-on-dark:${theme.textOnDark};--catalog-brand-text:${theme.brandText};--catalog-button-text:${theme.buttonText};--catalog-header-background:${theme.headerBackground};--catalog-header-nav-text:${theme.headerNavText};--catalog-header-nav-active:${theme.headerNavActive};--catalog-header-nav-hover:${theme.headerNavHover};--catalog-header-whatsapp-text:${theme.headerWhatsappText}}`}</style>
         <SelectionProvider>{children}</SelectionProvider>
       </body>
     </html>

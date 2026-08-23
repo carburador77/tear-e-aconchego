@@ -14,15 +14,25 @@ type LoadState = 'loading' | 'ready' | 'error';
 type SettingRow = { key: string; value: unknown; updated_at: string };
 type SettingMutation = { key: string; value: Record<string, string> };
 type LoadedSettings = { values: Values; revisions: Record<string, string | undefined> };
-type ColorKey = 'forest' | 'cream' | 'sand' | 'clay' | 'text' | 'textMuted' | 'textOnDark' | 'brandText' | 'buttonText';
+type ColorKey = 'forest' | 'cream' | 'sand' | 'clay' | 'text' | 'textMuted' | 'textOnDark' | 'brandText' | 'buttonText' | 'headerBackground' | 'headerNavText' | 'headerNavActive' | 'headerNavHover' | 'headerWhatsappText';
 
-const colorKeys: ColorKey[] = ['forest', 'brandText', 'cream', 'sand', 'clay', 'buttonText', 'text', 'textMuted', 'textOnDark'];
+const colorKeys: ColorKey[] = ['forest', 'headerBackground', 'brandText', 'headerNavText', 'headerNavActive', 'headerNavHover', 'headerWhatsappText', 'cream', 'sand', 'clay', 'buttonText', 'text', 'textMuted', 'textOnDark'];
 const colorGroups: Array<{ title: string; fields: Array<{ key: ColorKey; label: string; description: string }> }> = [
   {
     title: 'Identidade da marca',
     fields: [
-      { key: 'forest', label: 'Cor principal da marca', description: 'Usada no cabeçalho, em botões de destaque e nos elementos que utilizam o tom principal.' },
-      { key: 'brandText', label: 'Cor do nome da marca', description: 'Aplicada ao nome “Tear & Aconchego” nas áreas de fundo principal, como o cabeçalho.' },
+      { key: 'forest', label: 'Cor principal da marca', description: 'Usada em botões de destaque e nos elementos que utilizam o tom principal da identidade visual.' },
+    ],
+  },
+  {
+    title: 'Cabeçalho e navegação',
+    fields: [
+      { key: 'headerBackground', label: 'Fundo do cabeçalho', description: 'Cor de fundo da barra superior de navegação do site.' },
+      { key: 'brandText', label: 'Nome da marca no cabeçalho', description: 'Cor do texto “Tear & Aconchego” exibido no topo do site.' },
+      { key: 'headerNavText', label: 'Links da navegação', description: 'Cor de Início, Catálogo e Minha Seleção quando não estão selecionados.' },
+      { key: 'headerNavActive', label: 'Link ativo da navegação', description: 'Cor do item correspondente à página atual, incluindo seu sublinhado.' },
+      { key: 'headerNavHover', label: 'Links ao passar o mouse', description: 'Cor usada ao passar o cursor sobre os links da navegação.' },
+      { key: 'headerWhatsappText', label: 'WhatsApp no cabeçalho', description: 'Cor do link de WhatsApp exibido na navegação superior.' },
     ],
   },
   {
@@ -59,6 +69,11 @@ const defaults: Values = {
   textOnDark: '#f6f0e7',
   brandText: '#f6f0e7',
   buttonText: '#ffffff',
+  headerBackground: '#52604a',
+  headerNavText: '#ffffff',
+  headerNavActive: '#ffffff',
+  headerNavHover: '#ffffff',
+  headerWhatsappText: '#ffffff',
   whatsappNumber: DEFAULT_WHATSAPP_NUMBER,
 };
 
@@ -113,6 +128,14 @@ function parseSettings(rows: SettingRow[]): LoadedSettings {
   const contact = settings.get('contact') ?? {};
   const social = settings.get('social') ?? {};
   const theme = settings.get('theme') ?? {};
+  const resolvedTheme = {
+    ...theme,
+    headerBackground: theme.headerBackground ?? theme.forest ?? defaults.headerBackground,
+    headerNavText: theme.headerNavText ?? theme.buttonText ?? defaults.headerNavText,
+    headerNavActive: theme.headerNavActive ?? theme.buttonText ?? defaults.headerNavActive,
+    headerNavHover: theme.headerNavHover ?? theme.buttonText ?? defaults.headerNavHover,
+    headerWhatsappText: theme.headerWhatsappText ?? theme.buttonText ?? defaults.headerWhatsappText,
+  };
   return {
     values: {
       ...defaults,
@@ -126,7 +149,7 @@ function parseSettings(rows: SettingRow[]): LoadedSettings {
       phone: contact.phone ?? '',
       whatsappNumber: normalizeWhatsAppNumber(contact.whatsappNumber ?? contact.whatsappUrl),
       instagramUrl: social.instagramUrl ?? '',
-      ...theme,
+      ...resolvedTheme,
     },
     revisions: Object.fromEntries(rows.map((row) => [row.key, row.updated_at])),
   };
@@ -203,6 +226,9 @@ export default function Settings() {
   const primaryButtonContrast = contrastRatio(previewColors.forest, previewColors.buttonText);
   const clayButtonContrast = contrastRatio(previewColors.clay, previewColors.buttonText);
   const pageContrast = contrastRatio(previewColors.cream, previewColors.text);
+  const headerNavContrast = contrastRatio(previewColors.headerBackground, previewColors.headerNavText);
+  const headerBrandContrast = contrastRatio(previewColors.headerBackground, previewColors.brandText);
+  const headerWhatsappContrast = contrastRatio(previewColors.headerBackground, previewColors.headerWhatsappText);
 
   const persistSettings = async (rows: SettingMutation[]) => {
     const nextRevisions = { ...revisions };
@@ -324,8 +350,8 @@ export default function Settings() {
       <section className="rounded-lg bg-[#f2ece3] p-5">
         <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="font-serif text-2xl">Cores</h2><p className="mt-1 text-sm text-[#6e6254]">Escolha, compare e revise as cores antes de salvar.</p></div>{hasUnsavedColors && <p className="rounded-full bg-[#f2e1bd] px-3 py-1 text-xs font-semibold text-[#5c482d]">Alterações de cores não salvas</p>}</div>
         <div className="mt-6 space-y-6">{colorGroups.map((group) => <section key={group.title}><h3 className="text-xs font-bold uppercase tracking-[.16em] text-[#6e6254]">{group.title}</h3><div className="mt-3 grid gap-3 md:grid-cols-2">{group.fields.map((setting) => <ColorSettingField key={setting.key} id={`theme-${setting.key}`} label={setting.label} description={setting.description} value={values[setting.key] ?? ''} savedValue={savedColors[setting.key] ?? defaults[setting.key]} onChange={(value) => updateColor(setting.key, value)} onRestore={() => updateColor(setting.key, savedColors[setting.key] ?? defaults[setting.key])} />)}</div></section>)}</div>
-        <section className="mt-7 rounded-lg border border-[#d7cabc] bg-[#fffdf9] p-4"><h3 className="font-serif text-xl text-[#302518]">Prévia</h3><p className="mt-1 text-xs text-[#6e6254]">Esta amostra acompanha as cores escolhidas, mas só será publicada depois de salvar.</p><div className="mt-4 overflow-hidden rounded-md border border-[#d7cabc]" style={{ backgroundColor: previewColors.cream, color: previewColors.text }}><div className="flex items-center justify-between gap-3 px-4 py-3" style={{ backgroundColor: previewColors.forest, color: previewColors.textOnDark }}><strong className="font-serif text-lg" style={{ color: previewColors.brandText }}>Tear & Aconchego</strong><span className="text-xs">Catálogo</span></div><div className="p-5"><h4 className="font-serif text-2xl" style={{ color: previewColors.text }}>Feito à mão. Pensado para acolher.</h4><p className="mt-2 text-sm" style={{ color: previewColors.textMuted }}>Uma pequena amostra para visualizar títulos, textos e ações.</p><div className="mt-4 flex flex-wrap gap-3"><span className="rounded px-4 py-2 text-xs font-bold" style={{ backgroundColor: previewColors.forest, color: previewColors.buttonText }}>CONHEÇA O CATÁLOGO</span><span className="rounded px-4 py-2 text-xs font-bold" style={{ backgroundColor: previewColors.clay, color: previewColors.buttonText }}>VER PEÇAS</span></div></div><div className="px-5 py-3 text-xs" style={{ backgroundColor: previewColors.sand, color: previewColors.text }}>Seção de destaque</div></div>
-          {((primaryButtonContrast !== null && primaryButtonContrast < 4.5) || (clayButtonContrast !== null && clayButtonContrast < 4.5) || (pageContrast !== null && pageContrast < 4.5)) && <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">Contraste baixo — alguns textos podem ficar difíceis de ler.{(primaryButtonContrast !== null && primaryButtonContrast < 4.5) || (clayButtonContrast !== null && clayButtonContrast < 4.5) ? ' Revise a combinação dos botões.' : ''}{pageContrast !== null && pageContrast < 4.5 ? ' Revise a combinação do fundo principal e texto.' : ''}</div>}
+        <section className="mt-7 rounded-lg border border-[#d7cabc] bg-[#fffdf9] p-4"><h3 className="font-serif text-xl text-[#302518]">Prévia</h3><p className="mt-1 text-xs text-[#6e6254]">Esta amostra acompanha as cores escolhidas, mas só será publicada depois de salvar.</p><div className="mt-4 overflow-hidden rounded-md border border-[#d7cabc]" style={{ backgroundColor: previewColors.cream, color: previewColors.text }}><div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3" style={{ backgroundColor: previewColors.headerBackground }}><strong className="font-serif text-lg" style={{ color: previewColors.brandText }}>Tear & Aconchego</strong><div className="flex flex-wrap items-center gap-3 text-xs"><span style={{ color: previewColors.headerNavText }}>Início</span><span className="font-semibold underline underline-offset-4" style={{ color: previewColors.headerNavActive }}>Catálogo</span><span style={{ color: previewColors.headerNavText }}>Minha Seleção (1)</span><span style={{ color: previewColors.headerWhatsappText }}>WhatsApp ↗</span></div></div><div className="p-5"><h4 className="font-serif text-2xl" style={{ color: previewColors.text }}>Feito à mão. Pensado para acolher.</h4><p className="mt-2 text-sm" style={{ color: previewColors.textMuted }}>Uma pequena amostra para visualizar títulos, textos e ações.</p><div className="mt-4 flex flex-wrap gap-3"><span className="rounded px-4 py-2 text-xs font-bold" style={{ backgroundColor: previewColors.forest, color: previewColors.buttonText }}>CONHEÇA O CATÁLOGO</span><span className="rounded px-4 py-2 text-xs font-bold" style={{ backgroundColor: previewColors.clay, color: previewColors.buttonText }}>VER PEÇAS</span></div></div><div className="px-5 py-3 text-xs" style={{ backgroundColor: previewColors.sand, color: previewColors.text }}>Seção de destaque</div></div>
+          {((primaryButtonContrast !== null && primaryButtonContrast < 4.5) || (clayButtonContrast !== null && clayButtonContrast < 4.5) || (pageContrast !== null && pageContrast < 4.5) || (headerNavContrast !== null && headerNavContrast < 4.5) || (headerBrandContrast !== null && headerBrandContrast < 4.5) || (headerWhatsappContrast !== null && headerWhatsappContrast < 4.5)) && <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="status">Contraste baixo — este texto pode ficar difícil de ler.{(headerNavContrast !== null && headerNavContrast < 4.5) || (headerBrandContrast !== null && headerBrandContrast < 4.5) || (headerWhatsappContrast !== null && headerWhatsappContrast < 4.5) ? ' Revise as cores do cabeçalho.' : ''}{(primaryButtonContrast !== null && primaryButtonContrast < 4.5) || (clayButtonContrast !== null && clayButtonContrast < 4.5) ? ' Revise a combinação dos botões.' : ''}{pageContrast !== null && pageContrast < 4.5 ? ' Revise a combinação do fundo principal e texto.' : ''}</div>}
         </section>
       </section>
       <button disabled={saving} className="rounded bg-[#52604a] px-5 py-3 text-sm font-bold text-white disabled:opacity-60">{saving ? 'SALVANDO...' : 'SALVAR CONFIGURAÇÕES'}</button>
