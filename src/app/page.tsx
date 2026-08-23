@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import PublicHeader from '@/components/PublicHeader';
 import { getBenefits, getCategories, getSettings } from '@/lib/catalog';
 
 export default async function Home() {
@@ -9,10 +10,7 @@ export default async function Home() {
 
   return <main className="min-h-screen bg-[#eee7dd] text-[#39362f]">
     <div className="mx-auto min-h-screen max-w-[1320px] bg-[#f5f0e8]">
-      <header className="flex items-center justify-between bg-[#52604a] px-5 py-4 text-white md:px-10 md:py-5 lg:px-14">
-        <span className="font-serif text-xl md:text-2xl">{brand.name}</span>
-        <a className="text-sm md:text-base" href={contact.whatsappUrl}>WhatsApp ↗</a>
-      </header>
+      <PublicHeader active="home" />
 
       <section className="bg-[#f1e9df]">
         <div className="mx-auto flex max-w-4xl flex-col items-start px-8 py-8 md:px-14 md:py-16 lg:px-20 lg:py-20">

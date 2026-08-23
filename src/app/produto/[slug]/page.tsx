@@ -1,2 +1,25 @@
-import Link from'next/link';import{notFound}from'next/navigation';import{getProduct,getSettings,getVariants}from'@/lib/catalog';import{formatProductPrice}from'@/lib/price';import{buildProductWhatsAppUrl,DEFAULT_WHATSAPP_NUMBER}from'@/lib/whatsapp';import ProductColorSelector from'@/components/ProductColorSelector';
-export default async function Page({params}:{params:Promise<{slug:string}>}){const{slug}=await params;const[p,s]=await Promise.all([getProduct(slug),getSettings()]);if(!p)notFound();const variants=await getVariants(p.id);const contact=s.contact as{whatsappNumber?:string};const whatsappUrl=buildProductWhatsAppUrl({number:contact.whatsappNumber??DEFAULT_WHATSAPP_NUMBER,productName:p.name,customMessage:p.whatsapp_url});return <main className="mx-auto min-h-screen max-w-6xl bg-[#f7f2eb] px-6 py-6"><Link href="/catalogo">← Voltar ao catálogo</Link><div className="mt-6 grid gap-10 md:grid-cols-2"><ProductColorSelector image={p.image_url??''} variants={variants}/><section><p className="text-[10px] uppercase">{p.categories?.name}</p><h1 className="mt-3 font-serif text-4xl">{p.name}</h1><p className="mt-2 font-serif text-2xl">{formatProductPrice(p.price, p.price_label)}</p><p className="my-8">{p.description}</p>{[['A origem',p.origin],['Dimensões',p.dimensions],['Cuidados',p.care]].map(([a,v])=><div className="border-t border-[#d7cabc] py-5" key={a}><h2 className="font-serif text-lg">{a}</h2><p>{v}</p></div>)}<a className="mt-6 block bg-[#8a785d] p-4 text-center text-xs font-bold text-white" href={whatsappUrl} target="_blank" rel="noreferrer">ENCOMENDAR PELO WHATSAPP</a></section></div></main>}
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import ProductColorSelector from '@/components/ProductColorSelector';
+import PublicHeader from '@/components/PublicHeader';
+import { getProduct, getSettings, getVariants } from '@/lib/catalog';
+import { formatProductPrice } from '@/lib/price';
+import { buildProductWhatsAppUrl, DEFAULT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
+
+export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [product, settings] = await Promise.all([getProduct(slug), getSettings()]);
+  if (!product) notFound();
+
+  const variants = await getVariants(product.id);
+  const contact = settings.contact as { whatsappNumber?: string };
+  const whatsappUrl = buildProductWhatsAppUrl({ number: contact.whatsappNumber ?? DEFAULT_WHATSAPP_NUMBER, productName: product.name, customMessage: product.whatsapp_url });
+
+  return <main className="mx-auto min-h-screen max-w-6xl bg-[#f7f2eb]">
+    <PublicHeader active="catalog" />
+    <div className="px-6 py-6">
+      <Link href="/catalogo">← Voltar ao catálogo</Link>
+      <div className="mt-6 grid gap-10 md:grid-cols-2"><ProductColorSelector image={product.image_url ?? ''} variants={variants} /><section><p className="text-[10px] uppercase">{product.categories?.name}</p><h1 className="mt-3 font-serif text-4xl">{product.name}</h1><p className="mt-2 font-serif text-2xl">{formatProductPrice(product.price, product.price_label)}</p><p className="my-8">{product.description}</p>{[['A origem', product.origin], ['Dimensões', product.dimensions], ['Cuidados', product.care]].map(([title, value]) => <div className="border-t border-[#d7cabc] py-5" key={title}><h2 className="font-serif text-lg">{title}</h2><p>{value}</p></div>)}<a className="mt-6 block bg-[#8a785d] p-4 text-center text-xs font-bold text-white" href={whatsappUrl} target="_blank" rel="noreferrer">ENCOMENDAR PELO WHATSAPP</a></section></div>
+    </div>
+  </main>;
+}
