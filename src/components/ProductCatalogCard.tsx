@@ -17,7 +17,7 @@ export default function ProductCatalogCard({ product, showCategory = false }: { 
   return <article className="group">
     <div className="relative overflow-hidden">
       <Link href={`/produto/${product.slug}`} aria-label={`Ver ${product.name}`}>
-        <img className="h-80 w-full object-cover transition-opacity duration-200 group-hover:scale-[1.02]" src={image} alt={product.name} />
+        <img className="h-80 w-full object-cover transition-opacity duration-200 group-hover:scale-[1.02]" src={image} alt={selected ? `${product.name} - ${selected.color_name}` : product.name} />
       </Link>
       {hasNavigation && <>
         <button type="button" aria-label="Ver cor anterior" onClick={selectPrevious} className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-[#fffdf9]/90 text-2xl text-[#42362d] shadow-sm transition hover:bg-white">‹</button>
