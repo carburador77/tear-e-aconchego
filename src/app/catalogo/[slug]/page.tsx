@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import CategorySubcategoryNavigation from '@/components/CategorySubcategoryNavigation';
+import PublicFooter from '@/components/PublicFooter';
 import ProductSearch from '@/components/ProductSearch';
 import PublicHeader from '@/components/PublicHeader';
 import { getCategories, getProducts, getSubcategories } from '@/lib/catalog';
@@ -22,5 +23,6 @@ export default async function CategoryPage({ params, searchParams }: { params: P
       {category && <CategorySubcategoryNavigation categories={categories} category={category} subcategories={subcategories} selectedSubcategory={selectedSubcategory} searchQuery={searchQuery} />}
       {products.length > 0 ? <ProductSearch products={products} initialQuery={searchQuery} /> : <p className="py-14 text-center text-sm text-[#6e6254]">{selectedSubcategory ? 'Nenhuma peça encontrada nesta subcategoria.' : 'Nenhuma peça encontrada nesta categoria.'}</p>}
     </div>
+    <PublicFooter />
   </main>;
 }

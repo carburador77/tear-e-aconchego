@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import PublicFooter from '@/components/PublicFooter';
 import PublicHeader from '@/components/PublicHeader';
 import { getCategories, getProducts } from '@/lib/catalog';
 import ProductSearch from '@/components/ProductSearch';
@@ -16,5 +17,6 @@ export default async function Catalogo({ searchParams }: { searchParams: Promise
       <nav aria-label="Categorias" className="mb-8 flex flex-wrap justify-center gap-2">{categories.map((category) => <Link className="border border-[#c6b8a8] px-3 py-2 text-[10px] uppercase" href={`/catalogo/${category.slug}${searchSuffix}`} key={category.id}>{category.name}</Link>)}</nav>
       <ProductSearch products={products} initialQuery={searchQuery} showCategory />
     </div>
+    <PublicFooter />
   </main>;
 }
