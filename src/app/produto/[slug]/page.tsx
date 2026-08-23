@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import ProductColorSelector from '@/components/ProductColorSelector';
@@ -6,8 +7,18 @@ import PublicHeader from '@/components/PublicHeader';
 import { getProduct, getSettings, getVariants } from '@/lib/catalog';
 import { formatProductPrice } from '@/lib/price';
 import { buildProductWhatsAppUrl, DEFAULT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
+import { metadataDescription, publicMetadata, SITE_NAME, validImageUrl } from '@/lib/seo';
 
-export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+type ProductRouteProps = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({ params }: ProductRouteProps): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProduct(slug);
+  if (!product) return publicMetadata({ title: 'Produto', description: 'Conheça as peças artesanais da Tear & Aconchego.', path: '/catalogo' });
+  return publicMetadata({ title: product.name, description: metadataDescription(product.description, `Conheça o ${product.name} da Tear & Aconchego.`), path: `/produto/${product.slug}`, image: product.image_url, type: 'article' });
+}
+
+export default async function Page({ params }: ProductRouteProps) {
   const { slug } = await params;
   const [product, settings] = await Promise.all([getProduct(slug), getSettings()]);
   if (!product) notFound();
@@ -16,8 +27,10 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const contact = settings.contact as { whatsappNumber?: string };
   const whatsappUrl = buildProductWhatsAppUrl({ number: contact.whatsappNumber ?? DEFAULT_WHATSAPP_NUMBER, productName: product.name, customMessage: product.whatsapp_url });
   const details = [['Material', product.origin], ['Dimensões', product.dimensions], ['Cuidados', product.care]].filter(([, value]) => typeof value === 'string' && value.trim());
+  const structuredData = { '@context': 'https://schema.org', '@type': 'Product', name: product.name, description: metadataDescription(product.description, `Conheça o ${product.name} da Tear & Aconchego.`), ...(validImageUrl(product.image_url) ? { image: validImageUrl(product.image_url) } : {}), brand: { '@type': 'Brand', name: SITE_NAME } };
 
   return <main className="mx-auto min-h-screen max-w-6xl bg-[#f7f2eb]">
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
     <PublicHeader active="catalog" />
     <div className="px-6 py-6">
       <Link href="/catalogo">← Voltar ao catálogo</Link>

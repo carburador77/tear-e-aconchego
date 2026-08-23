@@ -1,7 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import PublicFooter from '@/components/PublicFooter';
 import PublicHeader from '@/components/PublicHeader';
 import { getBenefits, getCategories, getSettings } from '@/lib/catalog';
+import { metadataDescription, publicMetadata } from '@/lib/seo';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSettings();
+  const hero = settings.hero as { description?: string; imageUrl?: string };
+  return publicMetadata({ title: 'Tear & Aconchego | Decoração Artesanal', description: metadataDescription(hero.description), path: '/', image: hero.imageUrl, absoluteTitle: true });
+}
 
 export default async function Home() {
   const [s, c, b] = await Promise.all([getSettings(), getCategories(), getBenefits()]);

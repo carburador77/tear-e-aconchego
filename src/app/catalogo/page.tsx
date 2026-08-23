@@ -1,8 +1,12 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import PublicFooter from '@/components/PublicFooter';
 import PublicHeader from '@/components/PublicHeader';
 import { getCategories, getProducts } from '@/lib/catalog';
 import ProductSearch from '@/components/ProductSearch';
+import { publicMetadata } from '@/lib/seo';
+
+export const metadata: Metadata = publicMetadata({ title: 'Catálogo', description: 'Explore a seleção de peças artesanais da Tear & Aconchego para mesa posta e decoração.', path: '/catalogo' });
 
 export default async function Catalogo({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
   const [categories, products] = await Promise.all([getCategories(), getProducts()]);
