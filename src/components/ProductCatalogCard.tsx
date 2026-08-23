@@ -27,10 +27,10 @@ export default function ProductCatalogCard({ product, showCategory = false }: { 
     </div>
     {variants.length > 0 && <div className="mt-3 flex gap-2" aria-label="Cores disponíveis">{variants.map((variant, index) => <button key={variant.id} type="button" title={variant.color_name} aria-label={`Selecionar ${variant.color_name}`} onClick={() => setSelectedIndex(index)} className={`h-5 w-5 rounded-full border border-[#8d8173] ${selectedIndex === index ? 'ring-2 ring-[#52604a] ring-offset-2' : ''}`} style={{ backgroundColor: variant.color_hex }} />)}</div>}
     <Link href={`/produto/${product.slug}`} className="block">
-      {showCategory && <p className="mt-3 text-[10px] uppercase">{product.categories?.name}</p>}
-      <h2 className="mt-2 font-serif text-xl">{product.name}</h2>
-      <p className="text-sm">{product.description}</p>
-      <strong className="block font-serif">{formatProductPrice(product.price, product.price_label)}</strong>
+      {showCategory && <p className="mt-3 text-[10px] uppercase tracking-wide text-[#766d63]">{product.categories?.name}</p>}
+      <h2 className="catalog-card-name mt-2 font-serif text-xl leading-tight">{product.name}</h2>
+      {product.description?.trim() && <p className="catalog-card-description mt-2 text-sm leading-relaxed text-[#5f5549]">{product.description}</p>}
+      <strong className="mt-2 block font-serif">{formatProductPrice(product.price, product.price_label)}</strong>
     </Link>
   </article>;
 }

@@ -27,6 +27,19 @@ input::placeholder, textarea::placeholder { color: #766d63; opacity: 1; }
 input:focus, textarea:focus, select:focus { outline: 2px solid #52604a; outline-offset: 1px; }
 button { cursor: pointer; }
 
+/* Mantém os cards do catálogo compactos sem alterar o texto salvo. */
+.catalog-card-name,
+.catalog-card-description {
+  display: -webkit-box;
+  line-clamp: 2;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.catalog-card-name { max-height: 2.5rem; }
+.catalog-card-description { max-height: 2.85rem; }
+
 /* Valores editáveis na tela Configurações. */
 .bg-\[\#52604a\] { background-color: var(--catalog-forest) !important; }
 .bg-\[\#f5f0e8\], .bg-\[\#f7f2eb\] { background-color: var(--catalog-cream) !important; }
