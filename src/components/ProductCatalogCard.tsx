@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import AddToSelectionButton from '@/components/AddToSelectionButton';
 import { formatProductPrice } from '@/lib/price';
 import type { Product } from '@/types/catalog';
 
@@ -32,5 +33,6 @@ export default function ProductCatalogCard({ product, showCategory = false }: { 
       {product.description?.trim() && <p className="catalog-card-description mt-2 text-sm leading-relaxed text-[#5f5549]">{product.description}</p>}
       <strong className="mt-2 block font-serif">{formatProductPrice(product.price, product.price_label)}</strong>
     </Link>
+    <AddToSelectionButton productId={product.id} productName={product.name} variantId={selected?.id ?? null} variantName={selected?.color_name ?? null} className="mt-3" />
   </article>;
 }

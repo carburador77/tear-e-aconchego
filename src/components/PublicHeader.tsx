@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { getSettings } from '@/lib/catalog';
+import SelectionHeaderLink from '@/components/SelectionHeaderLink';
 
-type PublicHeaderProps = { active?: 'home' | 'catalog' };
+type PublicHeaderProps = { active?: 'home' | 'catalog' | 'selection' };
 
 export default async function PublicHeader({ active }: PublicHeaderProps) {
   const settings = await getSettings();
@@ -16,6 +17,7 @@ export default async function PublicHeader({ active }: PublicHeaderProps) {
       <nav aria-label="Navegação principal" className="order-3 flex w-full items-center gap-4 text-xs md:order-2 md:w-auto md:gap-6 md:text-sm">
         <Link href="/" aria-current={active === 'home' ? 'page' : undefined} className={linkClass('home')}>Início</Link>
         <Link href="/catalogo" aria-current={active === 'catalog' ? 'page' : undefined} className={linkClass('catalog')}>Catálogo</Link>
+        <SelectionHeaderLink active={active === 'selection'} className={linkClass('selection')} />
       </nav>
     </div>
   </header>;

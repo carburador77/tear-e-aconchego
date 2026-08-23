@@ -1,3 +1,5 @@
+import type { SelectionWhatsAppItem } from '@/types/selection';
+
 export const DEFAULT_WHATSAPP_NUMBER = '5547988116833';
 
 export function normalizeWhatsAppNumber(value?: string | null) {
@@ -21,5 +23,26 @@ export function getCustomProductWhatsAppMessage(value?: string | null) {
 
 export function buildProductWhatsAppUrl({ number, productName, customMessage }: { number?: string | null; productName: string; customMessage?: string | null }) {
   const message = getCustomProductWhatsAppMessage(customMessage) ?? defaultProductWhatsAppMessage(productName);
+  return `https://wa.me/${normalizeWhatsAppNumber(number)}?text=${encodeURIComponent(message)}`;
+}
+
+export function buildSelectionWhatsAppMessage(items: readonly SelectionWhatsAppItem[]) {
+  const lines = items.map(({ productName, variantName, quantity }) => {
+    const normalizedQuantity = Number.isFinite(quantity) ? Math.max(1, Math.trunc(quantity)) : 1;
+    const variant = variantName?.trim();
+    return `• ${normalizedQuantity}x ${productName.trim()}${variant ? ` — Cor: ${variant}` : ''}`;
+  });
+
+  return [
+    'Olá! Gostaria de solicitar uma composição com estas peças:',
+    '',
+    ...lines,
+    '',
+    'Gostaria de confirmar disponibilidade, possibilidades de personalização e valores.',
+  ].join('\n');
+}
+
+export function buildSelectionWhatsAppUrl({ number, items }: { number?: string | null; items: readonly SelectionWhatsAppItem[] }) {
+  const message = buildSelectionWhatsAppMessage(items);
   return `https://wa.me/${normalizeWhatsAppNumber(number)}?text=${encodeURIComponent(message)}`;
 }

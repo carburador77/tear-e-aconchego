@@ -4,6 +4,7 @@ import "./globals.css";
 import { getSettings } from '@/lib/catalog';
 import { absoluteUrl, DEFAULT_DESCRIPTION, SITE_NAME } from '@/lib/seo';
 import { getInstagramUrl } from '@/lib/social';
+import SelectionProvider from '@/components/SelectionProvider';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col"><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: absoluteUrl('/'), ...(instagramUrl ? { sameAs: [instagramUrl] } : {}) }) }} /><style>{`:root{--catalog-forest:${theme.forest??'#52604a'};--catalog-cream:${theme.cream??'#f5f0e8'};--catalog-sand:${theme.sand??'#e7dbca'};--catalog-clay:${theme.clay??'#997245'};--catalog-text:${theme.text??'#39362f'};--catalog-muted:${theme.textMuted??'#766d63'};--catalog-on-dark:${theme.textOnDark??'#f6f0e7'};--catalog-brand-text:${theme.brandText??'#f6f0e7'};--catalog-button-text:${theme.buttonText??'#ffffff'}}`}</style>{children}</body>
+      <body className="min-h-full flex flex-col"><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ '@context': 'https://schema.org', '@type': 'Organization', name: SITE_NAME, url: absoluteUrl('/'), ...(instagramUrl ? { sameAs: [instagramUrl] } : {}) }) }} /><style>{`:root{--catalog-forest:${theme.forest??'#52604a'};--catalog-cream:${theme.cream??'#f5f0e8'};--catalog-sand:${theme.sand??'#e7dbca'};--catalog-clay:${theme.clay??'#997245'};--catalog-text:${theme.text??'#39362f'};--catalog-muted:${theme.textMuted??'#766d63'};--catalog-on-dark:${theme.textOnDark??'#f6f0e7'};--catalog-brand-text:${theme.brandText??'#f6f0e7'};--catalog-button-text:${theme.buttonText??'#ffffff'}}`}</style><SelectionProvider>{children}</SelectionProvider></body>
     </html>
   );
 }
