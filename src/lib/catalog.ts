@@ -18,5 +18,16 @@ async function getPriceLabels() { const supabase = await createClient(); const {
 async function getVariantsForProducts(productIds: string[]) { if (!productIds.length) return new Map<string, ProductVariant[]>(); const supabase = await createClient(); const { data } = await supabase.from('product_variants').select('*').in('product_id', productIds).eq('active', true).order('is_default', { ascending: false }).order('display_order'); return (data ?? []).reduce((grouped, variant) => { const item = variant as ProductVariant; grouped.set(item.product_id, [...(grouped.get(item.product_id) ?? []), item]); return grouped; }, new Map<string, ProductVariant[]>()); }
 const addVariants = (items: Product[], variants: Map<string, ProductVariant[]>) => items.map((item) => ({ ...item, variants: variants.get(item.id) ?? [] }));
 export async function getProducts(categorySlug?: string, subcategoryId?: string): Promise<Product[]> { if (!configured) return sortProductsAlphabetically((categorySlug ? products.filter((p) => p.categories?.slug === categorySlug) : products).filter((product) => !subcategoryId || product.subcategory_id === subcategoryId)); const supabase = await createClient(); let query = supabase.from('products').select('*, categories!inner(name,slug)').eq('active', true).eq('categories.active', true).order('name'); if (categorySlug) query = query.eq('categories.slug', categorySlug); if (subcategoryId) query = query.eq('subcategory_id', subcategoryId); const { data } = await query; const items = (data ?? []) as Product[]; const [labels, variants] = await Promise.all([getPriceLabels(), getVariantsForProducts(items.map((item) => item.id))]); return sortProductsAlphabetically(addVariants(addPriceLabels(items, labels), variants)); }
+export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
+  const categorySlug = product.categories?.slug;
+  if (!categorySlug || limit < 1) return [];
+
+  const categoryProducts = (await getProducts(categorySlug)).filter((item) => item.id !== product.id);
+  if (!product.subcategory_id) return categoryProducts.slice(0, limit);
+
+  const sameSubcategory = categoryProducts.filter((item) => item.subcategory_id === product.subcategory_id);
+  const sameCategory = categoryProducts.filter((item) => item.subcategory_id !== product.subcategory_id);
+  return [...sameSubcategory, ...sameCategory].slice(0, limit);
+}
 export async function getProduct(slug: string): Promise<Product | null> { if (!configured) return products.find((p) => p.slug === slug) ?? null; const supabase = await createClient(); const [{ data }, labels] = await Promise.all([supabase.from('products').select('*, categories!inner(name,slug)').eq('slug', slug).eq('active', true).single(), getPriceLabels()]); if (!data) return null; return addPriceLabels([data as Product], labels)[0]; }
 export async function getVariants(productId:string):Promise<ProductVariant[]>{if(!configured)return [];const supabase=await createClient();const{data}=await supabase.from('product_variants').select('*').eq('product_id',productId).eq('active',true).order('is_default',{ascending:false}).order('display_order');return(data??[])as ProductVariant[]}
