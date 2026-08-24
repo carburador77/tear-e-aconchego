@@ -25,9 +25,11 @@ export default async function MinhaSelecaoPage() {
   ]);
   const contact = (settings.contact ?? {}) as { whatsappNumber?: string | null; whatsappUrl?: string | null };
 
-  return <main className="mx-auto min-h-screen max-w-6xl bg-[#f7f2eb] text-[#42362d]">
+  return <main className="min-h-screen bg-[#f7f2eb] text-[#42362d]">
     <PublicHeader active="selection" />
-    <SelectionPageClient whatsappNumber={contact.whatsappNumber ?? contact.whatsappUrl} supabaseConfigured={hasSupabaseEnv} fallbackProducts={fallbackProducts} />
+    <div className="mx-auto max-w-6xl">
+      <SelectionPageClient whatsappNumber={contact.whatsappNumber ?? contact.whatsappUrl} supabaseConfigured={hasSupabaseEnv} fallbackProducts={fallbackProducts} />
+    </div>
     <PublicFooter />
   </main>;
 }

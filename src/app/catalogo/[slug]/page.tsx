@@ -39,9 +39,9 @@ export default async function CategoryPage({ params, searchParams }: CategoryRou
   if (requestedSubcategory && !selectedSubcategory) notFound();
   const products = await getProducts(slug, selectedSubcategory?.id);
 
-  return <main className="mx-auto min-h-screen max-w-6xl bg-[#f7f2eb] text-[#42362d]">
+  return <main className="min-h-screen bg-[#f7f2eb] text-[#42362d]">
     <PublicHeader active="catalog" />
-    <div className="px-6 py-8">
+    <div className="mx-auto max-w-6xl px-6 py-8">
       <Link href={`/catalogo${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ''}`}>← Todas as peças</Link>
       <h1 className="mb-5 mt-8 text-center font-serif text-3xl">Peças da categoria</h1>
       <CategorySubcategoryNavigation categories={categories} category={category} subcategories={subcategories} selectedSubcategory={selectedSubcategory} searchQuery={searchQuery} />
