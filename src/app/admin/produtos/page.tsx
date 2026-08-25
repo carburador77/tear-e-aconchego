@@ -7,6 +7,8 @@ import { addCustomPriceText } from '@/lib/product-price-labels';
 import { sortProductsAlphabetically } from '@/lib/product-utils';
 import { CATALOG_IMAGE_ACCEPT, removeImage, uploadImage } from '@/lib/supabase/storage';
 import { defaultProductWhatsAppMessage, getCustomProductWhatsAppMessage } from '@/lib/whatsapp';
+import { isVariantImagesSchemaUnavailable } from '@/lib/product-images';
+import { removeCatalogImageIfUnused } from '@/lib/supabase/image-cleanup';
 import type { CatalogProduct, Category, Product, Subcategory } from '@/types/catalog';
 
 type ProductForm = { id?: string; updated_at?: string; category_id: string; subcategory_id: string; name: string; description: string; price: string; image_url: string; origin: string; dimensions: string; care: string; whatsapp_url: string };
@@ -128,8 +130,13 @@ export default function ProductsPage() {
   const deleteProduct = async (product: CatalogProduct) => {
     if (!window.confirm(`Excluir definitivamente o produto “${product.name}”?`)) return;
     setMessage('');
-    const { data: variants, error: variantsError } = await supabase.from('product_variants').select('image_url').eq('product_id', product.id);
+    const { data: variants, error: variantsError } = await supabase.from('product_variants').select('id,image_url').eq('product_id', product.id);
     if (variantsError) { setMessage(`Não foi possível verificar as imagens das variações: ${variantsError.message}`); return; }
+    const variantIds = (variants ?? []).map((variant) => variant.id);
+    const imagesResult = variantIds.length
+      ? await supabase.from('product_variant_images').select('image_url').in('product_variant_id', variantIds)
+      : { data: [], error: null };
+    if (imagesResult.error && !isVariantImagesSchemaUnavailable(imagesResult.error)) { setMessage(`Não foi possível verificar a galeria das variações: ${imagesResult.error.message}`); return; }
     let deleteQuery = supabase.from('products').delete().eq('id', product.id);
     if (product.updated_at) deleteQuery = deleteQuery.eq('updated_at', product.updated_at);
     const { data: deletedProduct, error } = await deleteQuery.select('id').maybeSingle();
@@ -139,8 +146,8 @@ export default function ProductsPage() {
     let cleanupWarning = '';
     try { await savePriceLabel(product.id, ''); }
     catch { cleanupWarning = ' O texto personalizado do preço não pôde ser limpo.'; }
-    const imageUrls = [product.image_url, ...(variants ?? []).map((variant) => variant.image_url)].filter((url): url is string => Boolean(url));
-    const cleanupResults = await Promise.allSettled(imageUrls.map((url) => removeImage(url)));
+    const imageUrls = [...new Set([product.image_url, ...(variants ?? []).map((variant) => variant.image_url), ...(imagesResult.data ?? []).map((image) => image.image_url)].filter((url): url is string => Boolean(url)))];
+    const cleanupResults = await Promise.allSettled(imageUrls.map((url) => removeCatalogImageIfUnused(url)));
     if (cleanupResults.some((result) => result.status === 'rejected')) cleanupWarning += ' Uma ou mais imagens não puderam ser removidas do armazenamento.';
     if (form.id === product.id) cancelEdit();
     try {

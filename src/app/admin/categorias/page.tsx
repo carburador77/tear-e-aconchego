@@ -5,12 +5,14 @@ import Link from 'next/link';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { CATALOG_IMAGE_ACCEPT, removeImage, uploadImage } from '@/lib/supabase/storage';
+import { isVariantImagesSchemaUnavailable } from '@/lib/product-images';
+import { removeCatalogImageIfUnused } from '@/lib/supabase/image-cleanup';
 import type { Category } from '@/types/catalog';
 
 type CategoryRow = Category & { updated_at: string };
 type CategoryProductImages = {
   image_url: string | null;
-  product_variants: Array<{ image_url: string | null }> | null;
+  product_variants: Array<{ id: string; image_url: string | null }> | null;
 };
 type CategoryForm = {
   id?: string;
@@ -193,21 +195,32 @@ export default function Categories() {
 
     const { data: linkedProducts, error: linkedProductsError } = await supabase
       .from('products')
-      .select('image_url,product_variants(image_url)')
+      .select('image_url,product_variants(id,image_url)')
       .eq('category_id', category.id);
     if (linkedProductsError) {
       setMessage(`A categoria não foi excluída porque não foi possível verificar as imagens vinculadas: ${linkedProductsError.message}`);
       return;
     }
 
+    const typedProducts = (linkedProducts ?? []) as CategoryProductImages[];
+    const variantIds = typedProducts.flatMap((product) => product.product_variants?.map((variant) => variant.id) ?? []);
+    const variantImagesResult = variantIds.length
+      ? await supabase.from('product_variant_images').select('image_url').in('product_variant_id', variantIds)
+      : { data: [], error: null };
+    if (variantImagesResult.error && !isVariantImagesSchemaUnavailable(variantImagesResult.error)) {
+      setMessage(`A categoria não foi excluída porque não foi possível verificar as galerias vinculadas: ${variantImagesResult.error.message}`);
+      return;
+    }
+
     const imageUrls = new Set<string>();
     if (category.image_url) imageUrls.add(category.image_url);
-    ((linkedProducts ?? []) as CategoryProductImages[]).forEach((product) => {
+    typedProducts.forEach((product) => {
       if (product.image_url) imageUrls.add(product.image_url);
       product.product_variants?.forEach((variant) => {
         if (variant.image_url) imageUrls.add(variant.image_url);
       });
     });
+    (variantImagesResult.data ?? []).forEach((image) => imageUrls.add(image.image_url));
 
     const { data, error } = await supabase
       .from('categories')
@@ -219,7 +232,10 @@ export default function Categories() {
     if (error) { setMessage(error.message); return; }
     if (!data) { setMessage(conflictError().message); return; }
 
-    const cleanupErrors = (await Promise.all([...imageUrls].map((url) => cleanupImage(url))))
+    const cleanupErrors = (await Promise.all([...imageUrls].map(async (url) => {
+      try { await removeCatalogImageIfUnused(url); return null; }
+      catch (error) { return errorMessage(error, 'Não foi possível limpar a imagem.'); }
+    })))
       .filter((cleanupError): cleanupError is string => Boolean(cleanupError));
     try {
       await refreshCategories();

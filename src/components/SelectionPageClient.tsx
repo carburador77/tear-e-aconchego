@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelection } from '@/components/SelectionProvider';
 import { MAX_SELECTION_QUANTITY } from '@/lib/selection';
+import { isVariantImagesSchemaUnavailable, legacyVariantImage, primaryVariantImage, sortVariantImages } from '@/lib/product-images';
 import { createClient } from '@/lib/supabase/client';
 import { buildSelectionWhatsAppUrl } from '@/lib/whatsapp';
-import type { Product } from '@/types/catalog';
+import type { Product, ProductVariantImage } from '@/types/catalog';
 import type { SelectionWhatsAppItem } from '@/types/selection';
 
 type CategoryJoin = { name: string; active?: boolean };
@@ -26,6 +27,7 @@ type SelectionVariantRow = {
   color_name: string;
   color_hex: string;
   image_url: string | null;
+  images: ProductVariantImage[];
 };
 
 type CatalogState = {
@@ -92,6 +94,7 @@ export default function SelectionPageClient({ whatsappNumber, supabaseConfigured
       color_name: variant.color_name,
       color_hex: variant.color_hex,
       image_url: variant.image_url,
+      images: variant.images,
     }))),
     error: null,
   }), [fallbackProducts]);
@@ -117,7 +120,7 @@ export default function SelectionPageClient({ whatsappNumber, supabaseConfigured
       .eq('active', true);
 
     void Promise.all([productsRequest, variantsRequest])
-      .then(([productsResult, variantsResult]) => {
+      .then(async ([productsResult, variantsResult]) => {
         if (ignore) return;
         const error = productsResult.error ?? variantsResult.error;
         if (error) {
@@ -125,10 +128,28 @@ export default function SelectionPageClient({ whatsappNumber, supabaseConfigured
           return;
         }
 
+        const variantRows = (variantsResult.data ?? []) as Omit<SelectionVariantRow, 'images'>[];
+        const imagesResult = variantRows.length
+          ? await supabase.from('product_variant_images').select('id,product_variant_id,image_url,sort_order,is_primary,created_at').in('product_variant_id', variantRows.map((variant) => variant.id)).order('is_primary', { ascending: false }).order('sort_order').order('created_at')
+          : { data: [], error: null };
+        if (ignore) return;
+        if (imagesResult.error && !isVariantImagesSchemaUnavailable(imagesResult.error)) {
+          setCatalog({ requestKey, products: [], variants: [], error: imagesResult.error.message });
+          return;
+        }
+        const groupedImages = ((imagesResult.data ?? []) as ProductVariantImage[]).reduce((grouped, image) => {
+          grouped.set(image.product_variant_id, [...(grouped.get(image.product_variant_id) ?? []), image]);
+          return grouped;
+        }, new Map<string, ProductVariantImage[]>());
+        const variants = variantRows.map((variant): SelectionVariantRow => ({
+          ...variant,
+          images: imagesResult.error ? legacyVariantImage(variant) : sortVariantImages(groupedImages.get(variant.id) ?? []),
+        }));
+
         setCatalog({
           requestKey,
           products: (productsResult.data ?? []) as unknown as SelectionProductRow[],
-          variants: (variantsResult.data ?? []) as SelectionVariantRow[],
+          variants,
           error: null,
         });
       })
@@ -246,7 +267,7 @@ export default function SelectionPageClient({ whatsappNumber, supabaseConfigured
         {resolvedItems.map(({ selectionItem, product, variant, unavailableReason }) => {
           const itemKey = `${selectionItem.productId}::${selectionItem.variantId ?? ''}`;
           const productName = product?.name ?? 'Produto indisponível';
-          const imageUrl = variant?.image_url ?? product?.image_url ?? null;
+          const imageUrl = primaryVariantImage(variant ?? undefined)?.image_url ?? product?.image_url ?? null;
           const categoryName = product ? getCategoryName(product.categories) : null;
           return <li key={itemKey}>
             <article className={`grid gap-4 rounded-lg border bg-[#fffdf9] p-4 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:p-5 ${unavailableReason ? 'border-[#c9a27b]' : 'border-[#d7cabc]'}`}>

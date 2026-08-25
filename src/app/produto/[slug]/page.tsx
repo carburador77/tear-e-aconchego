@@ -7,6 +7,7 @@ import PublicFooter from '@/components/PublicFooter';
 import PublicHeader from '@/components/PublicHeader';
 import { getProduct, getRelatedProducts, getSettings, getSubcategories, getVariants } from '@/lib/catalog';
 import { formatProductPrice } from '@/lib/price';
+import { primaryVariantImage, variantImageUrls } from '@/lib/product-images';
 import { buildProductWhatsAppUrl, DEFAULT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 import { metadataDescription, publicMetadata, serializeJsonLd, SITE_NAME, validImageUrl } from '@/lib/seo';
 
@@ -16,7 +17,9 @@ export async function generateMetadata({ params }: ProductRouteProps): Promise<M
   const { slug } = await params;
   const product = await getProduct(slug);
   if (!product) return publicMetadata({ title: 'Produto', description: 'Conheça as peças artesanais da Tear & Aconchego.', path: '/catalogo' });
-  return publicMetadata({ title: product.name, description: metadataDescription(product.description, `Conheça o ${product.name} da Tear & Aconchego.`), path: `/produto/${product.slug}`, image: product.image_url, type: 'article' });
+  const variants = await getVariants(product.id);
+  const shareImage = primaryVariantImage(variants[0])?.image_url ?? product.image_url;
+  return publicMetadata({ title: product.name, description: metadataDescription(product.description, `Conheça o ${product.name} da Tear & Aconchego.`), path: `/produto/${product.slug}`, image: shareImage, type: 'article' });
 }
 
 export default async function Page({ params }: ProductRouteProps) {
@@ -34,8 +37,10 @@ export default async function Page({ params }: ProductRouteProps) {
   const subcategoryHref = category && subcategory ? `/catalogo/${category.slug}?subcategoria=${encodeURIComponent(subcategory.slug)}` : null;
   const whatsappUrl = buildProductWhatsAppUrl({ number: settings.contact.whatsappNumber ?? DEFAULT_WHATSAPP_NUMBER, productName: product.name, customMessage: product.whatsapp_url });
   const details = [['Material', product.origin], ['Dimensões', product.dimensions], ['Cuidados', product.care]].filter(([, value]) => typeof value === 'string' && value.trim());
-  const structuredImage = validImageUrl(product.image_url);
-  const structuredData = { '@context': 'https://schema.org', '@type': 'Product', name: product.name, description: metadataDescription(product.description, `Conheça o ${product.name} da Tear & Aconchego.`), ...(structuredImage ? { image: structuredImage } : {}), brand: { '@type': 'Brand', name: SITE_NAME } };
+  const defaultVariantImages = variantImageUrls(variants[0]).map(validImageUrl).filter((url): url is string => Boolean(url));
+  const productFallbackImage = validImageUrl(product.image_url);
+  const structuredImages = defaultVariantImages.length ? defaultVariantImages : productFallbackImage ? [productFallbackImage] : [];
+  const structuredData = { '@context': 'https://schema.org', '@type': 'Product', name: product.name, description: metadataDescription(product.description, `Conheça o ${product.name} da Tear & Aconchego.`), ...(structuredImages.length ? { image: structuredImages } : {}), brand: { '@type': 'Brand', name: SITE_NAME } };
 
   return <main className="min-h-screen bg-[#f7f2eb]">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }} />

@@ -31,11 +31,15 @@ Em um projeto novo, abra **Supabase → SQL Editor** e execute nesta ordem:
 4. `supabase/migrations/003_product_variants.sql`;
 5. `supabase/migrations/004_subcategories.sql`.
 
-Em um projeto existente, execute somente as migrations 001–004 que ainda não foram aplicadas. A aplicação atual não depende de migrations posteriores.
+Depois de revisar e aprovar a galeria de imagens por cor, execute também:
+
+6. `supabase/migrations/005_product_variant_images.sql`.
+
+Em um projeto existente, execute somente as migrations ainda não aplicadas, sempre na ordem. Enquanto a migration 005 não for aplicada, o catálogo continua exibindo as imagens antigas, mas o painel mantém desabilitadas as ações de múltiplas imagens.
 
 Uma proposta futura de hardening está arquivada em `supabase/archive/` com extensão não executável. Ela serve apenas como referência e não é considerada pelo fluxo atual do Supabase CLI.
 
-O SQL cria o bucket público `catalog-images`. As imagens do catálogo são públicas; upload, substituição e exclusão exigem uma sessão administrativa. O painel aceita JPEG, PNG e WebP de até 5 MiB, organizados em `products/`, `categories/` e `site/`.
+O SQL cria o bucket público `catalog-images`. As imagens do catálogo são públicas; upload, substituição e exclusão exigem uma sessão administrativa. O painel aceita JPEG, PNG e WebP de até 5 MiB, organizados em `products/`, `categories/` e `site/`. Cada cor pode possuir até oito imagens; a migration 005 preserva a foto antiga de cada variação como sua primeira imagem principal.
 
 ## Criar o administrador
 

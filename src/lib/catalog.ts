@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
-import type { Benefit, CatalogProduct, Category, Product, ProductVariant, Subcategory } from '@/types/catalog';
+import type { Benefit, CatalogProduct, Category, Product, ProductVariant, ProductVariantImage, Subcategory } from '@/types/catalog';
 import { hasSupabaseEnv } from '@/lib/supabase/env';
 import { DEFAULT_WHATSAPP_NUMBER, normalizeWhatsAppNumber } from '@/lib/whatsapp';
 import { sortProductsAlphabetically } from '@/lib/product-utils';
 import { addCustomPriceText, type LegacyPriceLabels } from '@/lib/product-price-labels';
 import { cache } from 'react';
+import { isVariantImagesSchemaUnavailable, legacyVariantImage, sortVariantImages } from '@/lib/product-images';
 
 type SettingsObject = Record<string, unknown>;
 
@@ -264,6 +265,42 @@ async function getPriceLabels(): Promise<LegacyPriceLabels> {
   return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
 }
 
+type ProductVariantRow = Omit<ProductVariant, 'images'>;
+
+async function getImagesForVariants(variants: ProductVariantRow[]) {
+  const variantIds = variants.map((variant) => variant.id);
+  if (!variantIds.length) return new Map<string, ProductVariantImage[]>();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('product_variant_images')
+    .select('*')
+    .in('product_variant_id', variantIds)
+    .order('is_primary', { ascending: false })
+    .order('sort_order')
+    .order('created_at');
+
+  if (error) {
+    if (isVariantImagesSchemaUnavailable(error)) {
+      return new Map(variants.map((variant) => [variant.id, legacyVariantImage(variant)]));
+    }
+    catalogQueryError('as imagens das variações', error);
+  }
+
+  return ((data ?? []) as ProductVariantImage[]).reduce((grouped, image) => {
+    grouped.set(image.product_variant_id, [...(grouped.get(image.product_variant_id) ?? []), image]);
+    return grouped;
+  }, new Map<string, ProductVariantImage[]>());
+}
+
+async function attachVariantImages(variantRows: ProductVariantRow[]) {
+  const images = await getImagesForVariants(variantRows);
+  return variantRows.map((variant): ProductVariant => ({
+    ...variant,
+    images: sortVariantImages(images.get(variant.id) ?? []),
+  }));
+}
+
 async function getVariantsForProducts(productIds: string[]) {
   if (!productIds.length) return new Map<string, ProductVariant[]>();
 
@@ -277,8 +314,8 @@ async function getVariantsForProducts(productIds: string[]) {
     .order('display_order');
   if (error) catalogQueryError('as variações dos produtos', error);
 
-  return (data ?? []).reduce((grouped, variant) => {
-    const item = variant as ProductVariant;
+  const variants = await attachVariantImages((data ?? []) as ProductVariantRow[]);
+  return variants.reduce((grouped, item) => {
     grouped.set(item.product_id, [...(grouped.get(item.product_id) ?? []), item]);
     return grouped;
   }, new Map<string, ProductVariant[]>());
@@ -360,7 +397,7 @@ export async function getVariants(productId: string): Promise<ProductVariant[]> 
     .order('is_default', { ascending: false })
     .order('display_order');
   if (error) catalogQueryError('as variações do produto', error);
-  return (data ?? []) as ProductVariant[];
+  return attachVariantImages((data ?? []) as ProductVariantRow[]);
 }
 
 export async function getSitemapCatalogData(): Promise<SitemapCatalogData> {
