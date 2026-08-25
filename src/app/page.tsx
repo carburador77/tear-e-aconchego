@@ -26,7 +26,7 @@ export default async function Home() {
           <p className="mt-6 max-w-xl text-base leading-relaxed md:text-lg">{hero.description}</p>
           <Link className="mt-7 w-fit rounded bg-[#52604a] px-5 py-3 text-xs font-bold text-white md:mt-8 md:px-6 md:py-4" href="/catalogo">{hero.buttonText}</Link>
         </div>
-        <div className="min-h-64 bg-cover bg-center md:min-h-[400px] lg:h-[clamp(27rem,38vw,33rem)] lg:min-h-0" style={{ backgroundImage: `url(${hero.imageUrl})` }} />
+        <div className="min-h-64 bg-contain bg-center bg-no-repeat md:min-h-[400px] lg:h-[clamp(27rem,38vw,33rem)] lg:min-h-0" style={{ backgroundImage: `url(${hero.imageUrl})` }} />
       </div>
     </section>
 
