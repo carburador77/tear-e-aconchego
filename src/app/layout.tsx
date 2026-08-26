@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: { siteName: SITE_NAME, locale: 'pt_BR', type: 'website' },
   twitter: { card: 'summary' },
   robots: { index: true, follow: true },
-  icons: { icon: '/favicon.ico' },
+  icons: { icon: [{ url: '/branding/logo-favicon.png', type: 'image/png' }] },
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
