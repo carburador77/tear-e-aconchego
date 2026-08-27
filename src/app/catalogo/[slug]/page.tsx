@@ -5,7 +5,7 @@ import CategorySubcategoryNavigation from '@/components/CategorySubcategoryNavig
 import PublicFooter from '@/components/PublicFooter';
 import ProductSearch from '@/components/ProductSearch';
 import PublicHeader from '@/components/PublicHeader';
-import { getCategories, getProducts, getSubcategories } from '@/lib/catalog';
+import { getCategories, getProducts, getSettings, getSubcategories } from '@/lib/catalog';
 import { metadataDescription, publicMetadata } from '@/lib/seo';
 
 type CategoryRouteProps = { params: Promise<{ slug: string }>; searchParams: Promise<{ subcategoria?: string | string[]; q?: string | string[] }> };
@@ -37,7 +37,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryRou
   const searchQuery = typeof query.q === 'string' ? query.q : '';
   const selectedSubcategory = subcategories.find((item) => item.slug === requestedSubcategory);
   if (requestedSubcategory && !selectedSubcategory) notFound();
-  const products = await getProducts(slug, selectedSubcategory?.id);
+  const [products, settings] = await Promise.all([getProducts(slug, selectedSubcategory?.id), getSettings()]);
 
   return <main className="min-h-screen bg-[#f7f2eb] text-[#42362d]">
     <PublicHeader active="catalog" />
@@ -45,7 +45,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryRou
       <Link href={`/catalogo${searchQuery ? `?q=${encodeURIComponent(searchQuery)}` : ''}`}>← Todas as peças</Link>
       <h1 className="mb-5 mt-8 text-center font-serif text-3xl">Peças da categoria</h1>
       <CategorySubcategoryNavigation categories={categories} category={category} subcategories={subcategories} selectedSubcategory={selectedSubcategory} searchQuery={searchQuery} />
-      {products.length > 0 ? <ProductSearch products={products} initialQuery={searchQuery} /> : <p className="py-14 text-center text-sm text-[#6e6254]">{selectedSubcategory ? 'Nenhuma peça encontrada nesta subcategoria.' : 'Nenhuma peça encontrada nesta categoria.'}</p>}
+      {products.length > 0 ? <ProductSearch products={products} initialQuery={searchQuery} whatsappNumber={settings.contact.whatsappNumber} /> : <p className="py-14 text-center text-sm text-[#6e6254]">{selectedSubcategory ? 'Nenhuma peça encontrada nesta subcategoria.' : 'Nenhuma peça encontrada nesta categoria.'}</p>}
     </div>
     <PublicFooter />
   </main>;

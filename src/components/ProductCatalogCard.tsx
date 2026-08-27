@@ -5,9 +5,10 @@ import { useMemo, useState } from 'react';
 import AddToSelectionButton from '@/components/AddToSelectionButton';
 import { buildProductGalleryItems, galleryIndexForVariant } from '@/lib/product-images';
 import { formatProductPrice } from '@/lib/price';
+import { buildProductWhatsAppUrl } from '@/lib/whatsapp';
 import type { CatalogProduct } from '@/types/catalog';
 
-export default function ProductCatalogCard({ product, showCategory = false }: { product: CatalogProduct; showCategory?: boolean }) {
+export default function ProductCatalogCard({ product, showCategory = false, whatsappNumber }: { product: CatalogProduct; showCategory?: boolean; whatsappNumber?: string | null }) {
   const variants = useMemo(() => product.variants ?? [], [product.variants]);
   const galleryItems = useMemo(() => buildProductGalleryItems(variants, product.image_url ?? ''), [product.image_url, variants]);
   const [currentGalleryIndex, setCurrentGalleryIndex] = useState(0);
@@ -25,6 +26,8 @@ export default function ProductCatalogCard({ product, showCategory = false }: { 
   const imageAlt = selected
     ? `${product.name} — cor ${selected.color_name} — imagem ${(currentItem?.imageIndex ?? 0) + 1}`
     : product.name;
+  const whatsappProductName = selected ? `${product.name} na cor ${selected.color_name}` : product.name;
+  const whatsappUrl = buildProductWhatsAppUrl({ number: whatsappNumber, productName: whatsappProductName, customMessage: product.whatsapp_url });
 
   return <article className="group">
     <div className="relative overflow-hidden">
@@ -44,6 +47,7 @@ export default function ProductCatalogCard({ product, showCategory = false }: { 
       {product.description?.trim() && <p className="catalog-card-description mt-2 text-sm leading-relaxed text-[#5f5549]">{product.description}</p>}
       <strong className="mt-2 block font-serif">{formatProductPrice(product.price, product.custom_price_text)}</strong>
     </Link>
+    <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" aria-label={`Encomendar ${whatsappProductName} pelo WhatsApp`} title={`Encomendar ${whatsappProductName} pelo WhatsApp`} className="mt-3 flex w-full items-center justify-center rounded bg-[#8a785d] px-4 py-3 text-center text-xs font-bold text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#52604a] focus:ring-offset-2">ENCOMENDAR PELO WHATSAPP</a>
     <AddToSelectionButton productId={product.id} productName={product.name} variantId={selected?.id ?? null} variantName={selected?.color_name ?? null} className="mt-3" />
   </article>;
 }

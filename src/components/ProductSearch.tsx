@@ -12,9 +12,9 @@ const normalizeSearchText = (value: string) => value
   .replace(/\s+/g, ' ')
   .trim();
 
-type ProductSearchProps = { products: CatalogProduct[]; initialQuery?: string; showCategory?: boolean };
+type ProductSearchProps = { products: CatalogProduct[]; initialQuery?: string; showCategory?: boolean; whatsappNumber?: string | null };
 
-export default function ProductSearch({ products, initialQuery = '', showCategory = false }: ProductSearchProps) {
+export default function ProductSearch({ products, initialQuery = '', showCategory = false, whatsappNumber }: ProductSearchProps) {
   const [query, setQuery] = useState(initialQuery);
   const normalizedQuery = normalizeSearchText(query);
   const filteredProducts = useMemo(() => normalizedQuery ? products.filter((product) => normalizeSearchText(product.name).includes(normalizedQuery)) : products, [normalizedQuery, products]);
@@ -46,6 +46,6 @@ export default function ProductSearch({ products, initialQuery = '', showCategor
       {query && <p className="mt-3 text-center text-sm" role="status">{filteredProducts.length === 1 ? '1 peça encontrada' : `${filteredProducts.length} peças encontradas`}</p>}
     </div>
 
-    {filteredProducts.length > 0 ? <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{filteredProducts.map((product) => <ProductCatalogCard product={product} showCategory={showCategory} key={product.id} />)}</div> : <div className="py-14 text-center"><p className="font-serif text-xl">Nenhuma peça encontrada para “{query}”.</p><p className="mt-2 text-sm text-[#6e6254]">Tente outro nome ou explore nossas categorias.</p><button type="button" onClick={clearSearch} className="mt-5 underline underline-offset-4">Limpar busca</button></div>}
+    {filteredProducts.length > 0 ? <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{filteredProducts.map((product) => <ProductCatalogCard product={product} showCategory={showCategory} whatsappNumber={whatsappNumber} key={product.id} />)}</div> : <div className="py-14 text-center"><p className="font-serif text-xl">Nenhuma peça encontrada para “{query}”.</p><p className="mt-2 text-sm text-[#6e6254]">Tente outro nome ou explore nossas categorias.</p><button type="button" onClick={clearSearch} className="mt-5 underline underline-offset-4">Limpar busca</button></div>}
   </>;
 }
